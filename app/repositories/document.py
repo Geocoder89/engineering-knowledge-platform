@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
@@ -21,3 +22,19 @@ def get_document_by_id(
     document_id: UUID,
 ) -> Document | None:
     return session.get(Document, document_id)
+
+
+def list_documents(session: Session, *, offset: int, limit: int) -> list[Document]:
+    statement = (
+        select(Document)
+        .order_by(Document.created_at.desc(), Document.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    return list(session.scalars(statement).all())
+
+
+def count_documents(session: Session) -> int:
+    statement = select(func.count()).select_from(Document)
+    return session.scalar(statement) or 0
