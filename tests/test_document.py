@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID, uuid4
 
 
@@ -6,12 +7,14 @@ def test_create_document(client):
     response = client.post("/documents", json=payload)
 
     body = response.json()
+    created_at = datetime.fromisoformat(body["created_at"])
 
     assert response.status_code == 201
     assert response.history == []
     assert body["title"] == payload["title"]
     assert body["file_name"] == payload["file_name"]
     assert body["status"] == "pending"
+    assert created_at.tzinfo is not None
 
     UUID(body["id"])
 

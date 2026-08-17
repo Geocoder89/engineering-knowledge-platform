@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -13,3 +14,4 @@ class DocumentResponse(DocumentCreate):
     id: UUID
     status: Literal["pending"]
     model_config = ConfigDict(from_attributes=True)
+    created_at: datetime
