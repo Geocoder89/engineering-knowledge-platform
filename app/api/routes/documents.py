@@ -1,13 +1,13 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.models.document import Document
 from app.repositories import document as document_repository
-from app.schemas.document import DocumentCreate, DocumentResponse
+from app.schemas.document import DocumentCreate, DocumentListResponse, DocumentResponse
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -24,6 +24,19 @@ def create_document(document: DocumentCreate, session: SessionDependency) -> Doc
     )
     session.commit()
     return created_document
+
+
+@router.get("", response_model=DocumentListResponse)
+def list_documents(
+    session: SessionDependency,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> DocumentListResponse:
+    documents = document_repository.list_documents(session, offset=offset, limit=limit)
+    total = document_repository.count_documents(session)
+    return DocumentListResponse(
+        items=documents, total=total, offset=offset, limit=limit
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)

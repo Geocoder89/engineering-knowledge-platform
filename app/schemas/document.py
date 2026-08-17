@@ -15,3 +15,10 @@ class DocumentResponse(DocumentCreate):
     status: Literal["pending"]
     model_config = ConfigDict(from_attributes=True)
     created_at: datetime
+
+
+class DocumentListResponse(BaseModel):
+    items: list[DocumentResponse]
+    total: int
+    offset: int
+    limit: int
