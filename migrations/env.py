@@ -1,11 +1,10 @@
 from logging.config import fileConfig
 
+from alembic import context
+
 from app.config import settings
 from app.database import engine
-from app.models.base import Base
-import app.models.document
-
-from alembic import context
+from app.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -62,9 +61,7 @@ def run_migrations_online() -> None:
     connectable = engine
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
