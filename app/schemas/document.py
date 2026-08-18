@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.domain import DocumentStatus
 
 
 class DocumentCreate(BaseModel):
@@ -12,7 +13,7 @@ class DocumentCreate(BaseModel):
 
 class DocumentResponse(DocumentCreate):
     id: UUID
-    status: Literal["pending"]
+    status: DocumentStatus
     model_config = ConfigDict(from_attributes=True)
     created_at: datetime
 

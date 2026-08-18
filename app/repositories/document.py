@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.domain import DocumentStatus
 from app.models.document import Document
 
 
@@ -10,7 +11,7 @@ def create_document(session: Session, *, title: str, file_name: str) -> Document
     document = Document(
         title=title,
         file_name=file_name,
-        status="pending",
+        status=DocumentStatus.PENDING.value,
     )
     session.add(document)
     session.flush()
