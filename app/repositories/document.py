@@ -25,10 +25,14 @@ def get_document_by_id(
     return session.get(Document, document_id)
 
 
-def list_documents(session: Session, *, offset: int, limit: int) -> list[Document]:
+def list_documents(
+    session: Session, *, offset: int, limit: int, status: DocumentStatus | None = None
+) -> list[Document]:
+    statement = select(Document)
+    if status is not None:
+        statement = statement.where(Document.status == status)
     statement = (
-        select(Document)
-        .order_by(Document.created_at.desc(), Document.id.desc())
+        statement.order_by(Document.created_at.desc(), Document.id.desc())
         .offset(offset)
         .limit(limit)
     )
@@ -36,8 +40,17 @@ def list_documents(session: Session, *, offset: int, limit: int) -> list[Documen
     return list(session.scalars(statement).all())
 
 
-def count_documents(session: Session) -> int:
+def count_documents(
+    session: Session,
+    *,
+    status: DocumentStatus | None = None,
+) -> int:
     statement = select(func.count()).select_from(Document)
+    if status is not None:
+        statement = statement.where(
+            Document.status == status.value,
+        )
+
     return session.scalar(statement) or 0
 
 
