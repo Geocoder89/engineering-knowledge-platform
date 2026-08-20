@@ -18,8 +18,9 @@ class DocumentCreate(BaseModel):
 class DocumentResponse(DocumentCreate):
     id: UUID
     status: DocumentStatus
-    model_config = ConfigDict(from_attributes=True)
     created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentListResponse(BaseModel):

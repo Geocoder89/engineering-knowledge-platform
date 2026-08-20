@@ -35,3 +35,10 @@ class Document(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.clock_timestamp(),
+    )
