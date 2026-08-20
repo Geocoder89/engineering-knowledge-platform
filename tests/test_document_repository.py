@@ -1,4 +1,8 @@
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.database import SessionLocal
+from app.models.document import Document
 from app.repositories.document import (
     create_document,
     get_document_by_id,
@@ -26,5 +30,20 @@ def test_repository_creates_and_retrieves_document():
         assert retrieved_document.title == "Cooling system"
         assert retrieved_document.file_name == "cooling-design.pdf"
         assert retrieved_document.status == "pending"
+
+        session.rollback()
+
+
+def test_repository_rejects_invalid_document_status():
+    with SessionLocal() as session:
+        document = Document(
+            title="Invalid status document",
+            file_name="invalid-status.pdf",
+            status="unknown",
+        )
+        session.add(document)
+
+        with pytest.raises(IntegrityError):
+            session.flush()
 
         session.rollback()

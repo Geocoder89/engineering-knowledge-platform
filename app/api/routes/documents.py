@@ -5,9 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_session
+from app.domain.document import InvalidDocumentStatusTransition
 from app.models.document import Document
 from app.repositories import document as document_repository
-from app.schemas.document import DocumentCreate, DocumentListResponse, DocumentResponse
+from app.schemas.document import (
+    DocumentCreate,
+    DocumentListResponse,
+    DocumentResponse,
+    DocumentStatusUpdate,
+)
+from app.services import document as document_service
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -52,3 +59,28 @@ def get_document(document_id: UUID, session: SessionDependency) -> Document:
         )
 
     return document
+
+
+@router.patch("/{document_id}/status", response_model=DocumentResponse)
+def transition_document_status(
+    document_id: UUID,
+    status_update: DocumentStatusUpdate,
+    session: SessionDependency,
+) -> Document:
+    document = document_repository.get_document_by_id(session, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    try:
+        updated_document = document_service.transition_document_status(
+            session, document=document, target_status=status_update.status
+        )
+    except InvalidDocumentStatusTransition as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    session.commit()
+    return updated_document
