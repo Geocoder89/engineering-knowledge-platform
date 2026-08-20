@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.domain.document import DocumentStatus
 from app.models.document import Document
 
 
@@ -38,3 +39,11 @@ def list_documents(session: Session, *, offset: int, limit: int) -> list[Documen
 def count_documents(session: Session) -> int:
     statement = select(func.count()).select_from(Document)
     return session.scalar(statement) or 0
+
+
+def update_document_status(
+    session: Session, *, document: Document, status: DocumentStatus
+) -> Document:
+    document.status = status.value
+    session.flush()
+    return document

@@ -107,3 +107,83 @@ def test_rejects_invalid_document_pagination(client):
     response = client.get("/documents?offset=-1&limit=0")
 
     assert response.status_code == 422
+
+
+def test_transitions_document_through_valid_statuses(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    document = create_response.json()
+
+    for expected_status in ("processing", "ready", "archived"):
+        response = client.patch(
+            f"/documents/{document['id']}/status",
+            json={"status": expected_status},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == document["id"]
+        assert response.json()["status"] == expected_status
+
+
+def test_retries_failed_document(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Electrical system",
+            "file_name": "electrical-design.pdf",
+        },
+    )
+    document = create_response.json()
+
+    for expected_status in ("processing", "failed", "pending"):
+        response = client.patch(
+            f"/documents/{document['id']}/status",
+            json={"status": expected_status},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == expected_status
+
+
+def test_rejects_invalid_document_status_transition(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Hydraulic system",
+            "file_name": "hydraulic-design.pdf",
+        },
+    )
+    document = create_response.json()
+
+    response = client.patch(
+        f"/documents/{document['id']}/status",
+        json={"status": "ready"},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Cannot transition document from 'pending' to 'ready'"
+    }
+
+
+def test_rejects_unknown_document_status(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Structural system",
+            "file_name": "structural-design.pdf",
+        },
+    )
+    document = create_response.json()
+
+    response = client.patch(
+        f"/documents/{document['id']}/status",
+        json={"status": "finished"},
+    )
+
+    assert response.status_code == 422
