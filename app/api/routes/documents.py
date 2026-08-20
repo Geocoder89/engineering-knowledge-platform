@@ -13,6 +13,7 @@ from app.schemas.document import (
     DocumentListResponse,
     DocumentResponse,
     DocumentStatusUpdate,
+    DocumentUpdate,
 )
 from app.services import document as document_service
 
@@ -89,4 +90,31 @@ def transition_document_status(
             detail=str(error),
         ) from error
     session.commit()
+    return updated_document
+
+
+@router.patch("/{document_id}", response_model=DocumentResponse)
+def update_document_metadata(
+    document_id: UUID,
+    document_update: DocumentUpdate,
+    session: SessionDependency,
+) -> Document:
+    document = document_repository.get_document_by_id(session, document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    update_fields = document_update.model_dump(exclude_unset=True)
+
+    updated_document = document_repository.update_document_metadata(
+        session,
+        document=document,
+        **update_fields,
+    )
+
+    session.commit()
+
     return updated_document

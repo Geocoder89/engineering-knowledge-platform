@@ -60,3 +60,21 @@ def update_document_status(
     document.status = status.value
     session.flush()
     return document
+
+
+def update_document_metadata(
+    session: Session,
+    *,
+    document: Document,
+    title: str | None = None,
+    file_name: str | None = None,
+) -> Document:
+    if title is not None:
+        document.title = title
+
+    if file_name is not None:
+        document.file_name = file_name
+
+    session.flush()
+
+    return document

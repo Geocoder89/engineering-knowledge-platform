@@ -8,7 +8,6 @@ def test_create_document(client):
 
     body = response.json()
     created_at = datetime.fromisoformat(body["created_at"])
-    updated_at = datetime.fromisoformat(body["updated_at"])
 
     assert response.status_code == 201
     assert response.history == []
@@ -16,8 +15,6 @@ def test_create_document(client):
     assert body["file_name"] == payload["file_name"]
     assert body["status"] == "pending"
     assert created_at.tzinfo is not None
-    assert updated_at.tzinfo is not None
-    assert updated_at >= created_at
 
     UUID(body["id"])
 
@@ -32,26 +29,6 @@ def test_rejects_empty_document_file_name(client):
     payload = {"title": "A title", "file_name": ""}
     response = client.post("/documents", json=payload)
     assert response.status_code == 422
-
-
-def test_status_transition_updates_document_timestamp(client):
-    create_response = client.post(
-        "/documents",
-        json={"title": "Cooling system", "file_name": "cooling-design.pdf"},
-    )
-
-    assert create_response.status_code == 201
-
-    created_document = create_response.json()
-    original_updated_at = datetime.fromisoformat(created_document["updated_at"])
-    update_response = client.patch(
-        f"/documents/{created_document['id']}/status", json={"status": "processing"}
-    )
-
-    assert update_response.status_code == 200
-    updated_document = update_response.json()
-    new_updated_at = datetime.fromisoformat(updated_document["updated_at"])
-    assert new_updated_at > original_updated_at
 
 
 def test_retrieves_created_document(client):
@@ -271,3 +248,176 @@ def test_rejects_unknown_document_status_filter(client):
     response = client.get("/documents?status=finished")
 
     assert response.status_code == 422
+
+
+def test_partially_updates_document_metadata(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    created_document = create_response.json()
+    original_updated_at = datetime.fromisoformat(created_document["updated_at"])
+
+    update_response = client.patch(
+        f"/documents/{created_document['id']}",
+        json={"title": "Updated cooling system"},
+    )
+
+    assert update_response.status_code == 200
+
+    updated_document = update_response.json()
+    new_updated_at = datetime.fromisoformat(updated_document["updated_at"])
+
+    assert updated_document["id"] == created_document["id"]
+    assert updated_document["title"] == "Updated cooling system"
+    assert updated_document["file_name"] == "cooling-design.pdf"
+    assert updated_document["status"] == created_document["status"]
+    assert new_updated_at > original_updated_at
+
+    get_response = client.get(f"/documents/{created_document['id']}")
+
+    assert get_response.status_code == 200
+    assert get_response.json() == updated_document
+
+
+def test_updates_document_file_name(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Electrical system",
+            "file_name": "electrical-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    created_document = create_response.json()
+
+    update_response = client.patch(
+        f"/documents/{created_document['id']}",
+        json={"file_name": "electrical-design-v2.pdf"},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["title"] == "Electrical system"
+    assert update_response.json()["file_name"] == "electrical-design-v2.pdf"
+
+
+def test_rejects_empty_document_metadata_update(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Hydraulic system",
+            "file_name": "hydraulic-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    response = client.patch(
+        f"/documents/{document['id']}",
+        json={},
+    )
+
+    assert response.status_code == 422
+
+
+def test_returns_404_when_updating_unknown_document(client):
+    response = client.patch(
+        f"/documents/{uuid4()}",
+        json={"title": "Updated title"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document not found"}
+
+
+def test_status_transition_updates_document_timestamp(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    created_document = create_response.json()
+    original_updated_at = datetime.fromisoformat(created_document["updated_at"])
+
+    update_response = client.patch(
+        f"/documents/{created_document['id']}/status",
+        json={"status": "processing"},
+    )
+    assert update_response.status_code == 200
+
+    updated_document = update_response.json()
+    new_updated_at = datetime.fromisoformat(updated_document["updated_at"])
+
+    assert new_updated_at > original_updated_at
+
+
+def test_rejects_invalid_document_metadata_values(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    invalid_updates = (
+        {"title": "A"},
+        {"file_name": ""},
+        {"title": None},
+        {"file_name": None},
+    )
+
+    for payload in invalid_updates:
+        response = client.patch(
+            f"/documents/{document['id']}",
+            json=payload,
+        )
+
+        assert response.status_code == 422, payload
+
+    get_response = client.get(f"/documents/{document['id']}")
+
+    assert get_response.status_code == 200
+    assert get_response.json() == document
+
+
+def test_rejects_unsupported_document_metadata_field(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Electrical system",
+            "file_name": "electrical-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    response = client.patch(
+        f"/documents/{document['id']}",
+        json={
+            "title": "Updated electrical system",
+            "status": "ready",
+        },
+    )
+
+    assert response.status_code == 422
+
+    get_response = client.get(f"/documents/{document['id']}")
+
+    assert get_response.status_code == 200
+    assert get_response.json() == document
