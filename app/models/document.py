@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -9,6 +9,12 @@ from app.models.base import Base
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'ready', 'failed', 'archived')",
+            name="ck_documents_status",
+        ),
+    )
     id: Mapped[UUID] = mapped_column(
         Uuid,
         primary_key=True,
