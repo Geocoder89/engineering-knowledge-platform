@@ -187,3 +187,64 @@ def test_rejects_unknown_document_status(client):
     )
 
     assert response.status_code == 422
+
+
+def test_filters_documents_by_status(client):
+    documents = []
+
+    for title, file_name in (
+        ("Cooling system", "cooling-design.pdf"),
+        ("Electrical system", "electrical-design.pdf"),
+        ("Hydraulic system", "hydraulic-design.pdf"),
+    ):
+        response = client.post(
+            "/documents", json={"title": title, "file_name": file_name}
+        )
+
+        assert response.status_code == 201
+        documents.append(response.json())
+
+    ready_document = documents[0]
+    failed_document = documents[1]
+    pending_document = documents[2]
+
+    for target_status in ("processing", "ready"):
+        response = client.patch(
+            f"/documents/{ready_document['id']}/status",
+            json={"status": target_status},
+        )
+        assert response.status_code == 200
+
+    for target_status in ("processing", "failed"):
+        response = client.patch(
+            f"/documents/{failed_document['id']}/status", json={"status": target_status}
+        )
+
+        assert response.status_code == 200
+
+    failed_response = client.get("/documents?status=failed")
+
+    assert failed_response.status_code == 200
+
+    failed_page = failed_response.json()
+    assert failed_page["total"] == 1
+    assert len(failed_page["items"]) == 1
+    assert failed_page["items"][0]["id"] == failed_document["id"]
+    assert failed_page["items"][0]["status"] == "failed"
+
+    pending_response = client.get("/documents?status=pending")
+
+    assert pending_response.status_code == 200
+
+    pending_page = pending_response.json()
+
+    assert pending_page["total"] == 1
+    assert len(pending_page["items"]) == 1
+    assert pending_page["items"][0]["id"] == pending_document["id"]
+    assert pending_page["items"][0]["status"] == "pending"
+
+
+def test_rejects_unknown_document_status_filter(client):
+    response = client.get("/documents?status=finished")
+
+    assert response.status_code == 422

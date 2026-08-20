@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_session
-from app.domain.document import InvalidDocumentStatusTransition
+from app.domain.document import DocumentStatus, InvalidDocumentStatusTransition
 from app.models.document import Document
 from app.repositories import document as document_repository
 from app.schemas.document import (
@@ -38,9 +38,15 @@ def list_documents(
     session: SessionDependency,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    document_status: Annotated[
+        DocumentStatus | None,
+        Query(alias="status"),
+    ] = None,
 ) -> DocumentListResponse:
-    documents = document_repository.list_documents(session, offset=offset, limit=limit)
-    total = document_repository.count_documents(session)
+    documents = document_repository.list_documents(
+        session, offset=offset, limit=limit, status=document_status
+    )
+    total = document_repository.count_documents(session, status=document_status)
     return DocumentListResponse(
         items=documents, total=total, offset=offset, limit=limit
     )
