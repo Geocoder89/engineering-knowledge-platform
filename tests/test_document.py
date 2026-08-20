@@ -421,3 +421,57 @@ def test_rejects_unsupported_document_metadata_field(client):
 
     assert get_response.status_code == 200
     assert get_response.json() == document
+
+
+def test_excludes_archived_documents_from_default_listing(client):
+    active_response = client.post(
+        "/documents",
+        json={
+            "title": "Active cooling system",
+            "file_name": "active-cooling.pdf",
+        },
+    )
+    assert active_response.status_code == 201
+    active_document = active_response.json()
+
+    archived_response = client.post(
+        "/documents",
+        json={
+            "title": "Archived cooling system",
+            "file_name": "archived-cooling.pdf",
+        },
+    )
+    assert archived_response.status_code == 201
+    archived_document = archived_response.json()
+
+    for target_status in ("processing", "ready", "archived"):
+        transition_response = client.patch(
+            f"/documents/{archived_document['id']}/status",
+            json={"status": target_status},
+        )
+        assert transition_response.status_code == 200
+
+    default_response = client.get("/documents")
+
+    assert default_response.status_code == 200
+
+    default_page = default_response.json()
+
+    assert default_page["total"] == 1
+    assert len(default_page["items"]) == 1
+    assert default_page["items"][0]["id"] == active_document["id"]
+
+    archived_list_response = client.get("/documents?status=archived")
+
+    assert archived_list_response.status_code == 200
+
+    archived_page = archived_list_response.json()
+
+    assert archived_page["total"] == 1
+    assert len(archived_page["items"]) == 1
+    assert archived_page["items"][0]["id"] == archived_document["id"]
+
+    archived_get_response = client.get(f"/documents/{archived_document['id']}")
+
+    assert archived_get_response.status_code == 200
+    assert archived_get_response.json()["status"] == "archived"

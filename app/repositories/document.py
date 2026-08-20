@@ -29,8 +29,11 @@ def list_documents(
     session: Session, *, offset: int, limit: int, status: DocumentStatus | None = None
 ) -> list[Document]:
     statement = select(Document)
-    if status is not None:
-        statement = statement.where(Document.status == status)
+    if status is None:
+        status_condition = Document.status != DocumentStatus.ARCHIVED.value
+    else:
+        status_condition = Document.status == status.value
+    statement = statement.where(status_condition)
     statement = (
         statement.order_by(Document.created_at.desc(), Document.id.desc())
         .offset(offset)
@@ -45,13 +48,14 @@ def count_documents(
     *,
     status: DocumentStatus | None = None,
 ) -> int:
-    statement = select(func.count()).select_from(Document)
-    if status is not None:
-        statement = statement.where(
-            Document.status == status.value,
-        )
+    count_statement = select(func.count()).select_from(Document)
+    if status is None:
+        status_condition = Document.status != DocumentStatus.ARCHIVED.value
+    else:
+        status_condition = Document.status == status.value
 
-    return session.scalar(statement) or 0
+    count_statement = count_statement.where(status_condition)
+    return session.scalar(count_statement) or 0
 
 
 def update_document_status(
