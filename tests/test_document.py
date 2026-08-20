@@ -8,6 +8,7 @@ def test_create_document(client):
 
     body = response.json()
     created_at = datetime.fromisoformat(body["created_at"])
+    updated_at = datetime.fromisoformat(body["updated_at"])
 
     assert response.status_code == 201
     assert response.history == []
@@ -15,6 +16,8 @@ def test_create_document(client):
     assert body["file_name"] == payload["file_name"]
     assert body["status"] == "pending"
     assert created_at.tzinfo is not None
+    assert updated_at.tzinfo is not None
+    assert updated_at >= created_at
 
     UUID(body["id"])
 
@@ -29,6 +32,26 @@ def test_rejects_empty_document_file_name(client):
     payload = {"title": "A title", "file_name": ""}
     response = client.post("/documents", json=payload)
     assert response.status_code == 422
+
+
+def test_status_transition_updates_document_timestamp(client):
+    create_response = client.post(
+        "/documents",
+        json={"title": "Cooling system", "file_name": "cooling-design.pdf"},
+    )
+
+    assert create_response.status_code == 201
+
+    created_document = create_response.json()
+    original_updated_at = datetime.fromisoformat(created_document["updated_at"])
+    update_response = client.patch(
+        f"/documents/{created_document['id']}/status", json={"status": "processing"}
+    )
+
+    assert update_response.status_code == 200
+    updated_document = update_response.json()
+    new_updated_at = datetime.fromisoformat(updated_document["updated_at"])
+    assert new_updated_at > original_updated_at
 
 
 def test_retrieves_created_document(client):
