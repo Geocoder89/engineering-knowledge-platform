@@ -86,3 +86,13 @@ def get_document_version_by_number(
     )
 
     return session.scalar(statement)
+
+
+def get_document_version_by_checksum(
+    session: Session, *, document_id: UUID, checksum_sha256: str
+) -> DocumentVersion | None:
+    statement = select(DocumentVersion).where(
+        DocumentVersion.document_id == document_id,
+        DocumentVersion.checksum_sha256 == checksum_sha256,
+    )
+    return session.scalar(statement)

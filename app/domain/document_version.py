@@ -18,6 +18,11 @@ class DocumentContentIntegrityError(ValueError):
         super().__init__("Document content failed integrity check")
 
 
+class DuplicateDocumentVersionError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("This document version has already been uploaded")
+
+
 def validate_document_file(
     *,
     content_type: str,

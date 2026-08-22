@@ -33,6 +33,11 @@ class DocumentVersion(Base):
             "size_bytes > 0",
             name="ck_document_versions_size_bytes_positive",
         ),
+        UniqueConstraint(
+            "document_id",
+            "checksum_sha256",
+            name=("uq_document_versions_document_id_checksum_sha256"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
