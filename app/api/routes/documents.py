@@ -1,12 +1,24 @@
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Path,
+    Query,
+    UploadFile,
+    status,
+)
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.domain.document import DocumentStatus, InvalidDocumentStatusTransition
 from app.domain.document_version import (
+    DocumentContentIntegrityError,
     EmptyDocumentFileError,
     InvalidPdfContentError,
     UnsupportedDocumentFileTypeError,
@@ -14,6 +26,7 @@ from app.domain.document_version import (
 from app.models.document import Document
 from app.models.document_version import DocumentVersion
 from app.repositories import document as document_repository
+from app.repositories import document_version as document_version_repository
 from app.schemas.document import (
     DocumentCreate,
     DocumentListResponse,
@@ -21,7 +34,10 @@ from app.schemas.document import (
     DocumentStatusUpdate,
     DocumentUpdate,
 )
-from app.schemas.document_version import DocumentVersionResponse
+from app.schemas.document_version import (
+    DocumentVersionListResponse,
+    DocumentVersionResponse,
+)
 from app.services import document as document_service
 from app.services import document_version as document_version_service
 from app.storage.dependencies import DocumentStorageDependency
@@ -129,6 +145,32 @@ def update_document_metadata(
     return updated_document
 
 
+@router.get("/{document_id}/versions", response_model=DocumentVersionListResponse)
+def list_document_versions(
+    document_id: UUID,
+    session: SessionDependency,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> DocumentVersionListResponse:
+    document = document_repository.get_document_by_id(session, document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+    versions = document_version_repository.list_document_versions(
+        session, document_id=document.id, offset=offset, limit=limit
+    )
+    total = document_version_repository.count_document_versions(
+        session,
+        document_id=document.id,
+    )
+
+    return DocumentVersionListResponse(
+        items=versions, total=total, offset=offset, limit=limit
+    )
+
+
 @router.post(
     "/{document_id}/versions",
     response_model=DocumentVersionResponse,
@@ -181,3 +223,95 @@ def upload_document_version(
         raise
 
     return uploaded_version
+
+
+@router.get(
+    "/{document_id}/versions/{version_number}", response_model=DocumentVersionResponse
+)
+def get_document_version(
+    document_id: UUID,
+    version_number: Annotated[int, Path(ge=1)],
+    session: SessionDependency,
+) -> DocumentVersion:
+    document = document_repository.get_document_by_id(session, document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    document_version = document_version_repository.get_document_version_by_number(
+        session, document_id=document.id, version_number=version_number
+    )
+
+    if document_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document version not found"
+        )
+
+    return document_version
+
+
+@router.get(
+    "/{document_id}/versions/{version_number}/content",
+    response_class=Response,
+)
+def download_document_version_content(
+    document_id: UUID,
+    version_number: Annotated[int, Path(ge=1)],
+    session: SessionDependency,
+    storage: DocumentStorageDependency,
+) -> Response:
+    document = document_repository.get_document_by_id(
+        session,
+        document_id,
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    document_version = document_version_repository.get_document_version_by_number(
+        session,
+        document_id=document.id,
+        version_number=version_number,
+    )
+
+    if document_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document version not found",
+        )
+
+    try:
+        content = document_version_service.read_document_version_content(
+            storage, document_version=document_version
+        )
+    except FileNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document content not found",
+        ) from error
+    except DocumentContentIntegrityError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+
+    encoded_file_name = quote(
+        document_version.file_name,
+        safe="",
+    )
+
+    return Response(
+        content=content,
+        media_type=document_version.content_type,
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename*=UTF-8''{encoded_file_name}"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

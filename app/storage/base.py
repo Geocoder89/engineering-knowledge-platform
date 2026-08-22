@@ -11,3 +11,12 @@ class DocumentStorage(Protocol):
         Delete content associated with the supplied storage key.
         """
         ...
+
+    def read(
+        self,
+        *,
+        key: str,
+    ) -> bytes:
+        """
+        Read and return content stored under the supplied key.
+        """

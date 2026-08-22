@@ -214,3 +214,291 @@ def test_uploads_subsequent_document_versions(
 
     assert len(stored_files) == 2
     assert {path.read_bytes() for path in stored_files} == set(file_contents)
+
+
+def test_lists_document_versions_with_pagination(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    for version_number in range(1, 4):
+        upload_response = client.post(
+            f"/documents/{document['id']}/versions",
+            files={
+                "file": (
+                    f"cooling-design-v{version_number}.pdf",
+                    (f"%PDF-1.7\nCooling system version {version_number}").encode(),
+                    "application/pdf",
+                )
+            },
+        )
+
+        assert upload_response.status_code == 201
+
+    first_response = client.get(
+        f"/documents/{document['id']}/versions?offset=0&limit=2"
+    )
+
+    assert first_response.status_code == 200
+
+    first_page = first_response.json()
+
+    assert first_page["total"] == 3
+    assert first_page["offset"] == 0
+    assert first_page["limit"] == 2
+    assert [version["version_number"] for version in first_page["items"]] == [3, 2]
+
+    second_response = client.get(
+        f"/documents/{document['id']}/versions?offset=2&limit=2"
+    )
+
+    assert second_response.status_code == 200
+
+    second_page = second_response.json()
+
+    assert second_page["total"] == 3
+    assert second_page["offset"] == 2
+    assert second_page["limit"] == 2
+    assert [version["version_number"] for version in second_page["items"]] == [1]
+
+
+def test_rejects_invalid_document_version_pagination(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    response = client.get(f"/documents/{document['id']}/versions?offset=-1&limit=0")
+
+    assert response.status_code == 422
+
+
+def test_returns_404_when_listing_versions_for_unknown_document(client):
+    response = client.get(f"/documents/{uuid4()}/versions")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document not found"}
+
+
+def test_retrieves_document_version_metadata(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    upload_response = client.post(
+        f"/documents/{document['id']}/versions",
+        files={
+            "file": (
+                "cooling-design.pdf",
+                b"%PDF-1.7\nCooling system design",
+                "application/pdf",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+
+    uploaded_version = upload_response.json()
+
+    response = client.get(f"/documents/{document['id']}/versions/1")
+
+    assert response.status_code == 200
+    assert response.json() == uploaded_version
+
+
+def test_returns_404_for_unknown_document_version(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    response = client.get(f"/documents/{document['id']}/versions/99")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document version not found"}
+
+
+def test_returns_404_when_retrieving_version_for_unknown_document(client):
+    response = client.get(f"/documents/{uuid4()}/versions/1")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document not found"}
+
+
+def test_rejects_invalid_document_version_number(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    response = client.get(f"/documents/{document['id']}/versions/0")
+
+    assert response.status_code == 422
+
+
+def test_downloads_document_version_content(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+    file_content = b"%PDF-1.7\nCooling system design"
+
+    upload_response = client.post(
+        f"/documents/{document['id']}/versions",
+        files={
+            "file": (
+                "cooling-design.pdf",
+                file_content,
+                "application/pdf",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+
+    response = client.get(f"/documents/{document['id']}/versions/1/content")
+
+    assert response.status_code == 200
+    assert response.content == file_content
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"] == (
+        "attachment; filename*=UTF-8''cooling-design.pdf"
+    )
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_returns_404_when_downloading_unknown_document_version(client):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    response = client.get(f"/documents/{document['id']}/versions/99/content")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document version not found"}
+
+
+def test_returns_404_when_downloading_from_unknown_document(client):
+    response = client.get(f"/documents/{uuid4()}/versions/1/content")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document not found"}
+
+
+def test_returns_404_when_document_version_content_is_missing(
+    client,
+    document_storage_path,
+):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    upload_response = client.post(
+        f"/documents/{document['id']}/versions",
+        files={
+            "file": (
+                "cooling-design.pdf",
+                b"%PDF-1.7\nCooling system design",
+                "application/pdf",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+
+    stored_file = next(
+        path for path in document_storage_path.rglob("*") if path.is_file()
+    )
+    stored_file.unlink()
+
+    response = client.get(f"/documents/{document['id']}/versions/1/content")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document content not found"}
+
+
+def test_rejects_corrupted_document_version_content(
+    client,
+    document_storage_path,
+):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    upload_response = client.post(
+        f"/documents/{document['id']}/versions",
+        files={
+            "file": (
+                "cooling-design.pdf",
+                b"%PDF-1.7\nCooling system design",
+                "application/pdf",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+
+    stored_file = next(
+        path for path in document_storage_path.rglob("*") if path.is_file()
+    )
+    stored_file.write_bytes(b"corrupted content")
+
+    response = client.get(f"/documents/{document['id']}/versions/1/content")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Document content failed integrity check"}

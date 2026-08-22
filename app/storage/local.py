@@ -22,3 +22,11 @@ class LocalDocumentStorage:
             raise ValueError("Storage key resolves outside the storage directory")
 
         return destination
+
+    def read(
+        self,
+        *,
+        key: str,
+    ) -> bytes:
+        destination = self._resolve_destination(key)
+        return destination.read_bytes()
