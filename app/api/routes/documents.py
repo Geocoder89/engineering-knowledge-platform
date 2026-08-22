@@ -15,10 +15,12 @@ from fastapi import (
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_session
 from app.domain.document import DocumentStatus, InvalidDocumentStatusTransition
 from app.domain.document_version import (
     DocumentContentIntegrityError,
+    DocumentFileTooLargeError,
     DuplicateDocumentVersionError,
     EmptyDocumentFileError,
     InvalidPdfContentError,
@@ -193,9 +195,10 @@ def upload_document_version(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
 
-    content = file.file.read()
-
     try:
+        content = document_version_service.read_document_file(
+            file.file, max_size_bytes=settings.document_max_upload_size_bytes
+        )
         uploaded_version = document_version_service.upload_document_version(
             session,
             storage,
@@ -204,6 +207,11 @@ def upload_document_version(
             content_type=file.content_type or "application/octet_stream",
             content=content,
         )
+    except DocumentFileTooLargeError as error:
+        raise HTTPException(
+            status_code=413,
+            detail=str(error),
+        ) from error
 
     except EmptyDocumentFileError as error:
         raise HTTPException(
