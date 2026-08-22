@@ -1,12 +1,18 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.domain.document import DocumentStatus, InvalidDocumentStatusTransition
+from app.domain.document_version import (
+    EmptyDocumentFileError,
+    InvalidPdfContentError,
+    UnsupportedDocumentFileTypeError,
+)
 from app.models.document import Document
+from app.models.document_version import DocumentVersion
 from app.repositories import document as document_repository
 from app.schemas.document import (
     DocumentCreate,
@@ -15,7 +21,10 @@ from app.schemas.document import (
     DocumentStatusUpdate,
     DocumentUpdate,
 )
+from app.schemas.document_version import DocumentVersionResponse
 from app.services import document as document_service
+from app.services import document_version as document_version_service
+from app.storage.dependencies import DocumentStorageDependency
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -118,3 +127,57 @@ def update_document_metadata(
     session.commit()
 
     return updated_document
+
+
+@router.post(
+    "/{document_id}/versions",
+    response_model=DocumentVersionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_document_version(
+    document_id: UUID,
+    file: Annotated[UploadFile, File()],
+    session: SessionDependency,
+    storage: DocumentStorageDependency,
+) -> DocumentVersion:
+    document = document_repository.get_document_by_id(
+        session,
+        document_id,
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    content = file.file.read()
+
+    try:
+        uploaded_version = document_version_service.upload_document_version(
+            session,
+            storage,
+            document_id=document.id,
+            file_name=file.filename or document.file_name,
+            content_type=file.content_type or "application/octet_stream",
+            content=content,
+        )
+
+    except EmptyDocumentFileError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
+
+    except (UnsupportedDocumentFileTypeError, InvalidPdfContentError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=str(error),
+        ) from error
+
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        storage.delete(key=uploaded_version.storage_key)
+        raise
+
+    return uploaded_version
