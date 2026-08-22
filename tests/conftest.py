@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,12 +7,24 @@ from sqlalchemy.orm import Session
 
 from app.database import engine, get_session
 from app.main import app
+from app.storage.dependencies import get_document_storage
+from app.storage.local import LocalDocumentStorage
 
 
 @pytest.fixture
-def client() -> Generator[TestClient, None, None]:
+def document_storage_path(tmp_path: Path) -> Path:
+    return tmp_path / "document-storage"
+
+
+@pytest.fixture
+def client(document_storage_path: Path) -> Generator[TestClient, None, None]:
     connection = engine.connect()
     outer_transaction = connection.begin()
+
+    def override_get_document_storage() -> LocalDocumentStorage:
+        return LocalDocumentStorage(
+            root_path=document_storage_path,
+        )
 
     def override_get_session() -> Generator[Session, None, None]:
         with Session(
@@ -23,7 +36,7 @@ def client() -> Generator[TestClient, None, None]:
             yield session
 
     app.dependency_overrides[get_session] = override_get_session
-
+    app.dependency_overrides[get_document_storage] = override_get_document_storage
     try:
         with TestClient(app) as test_client:
             yield test_client
