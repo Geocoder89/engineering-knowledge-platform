@@ -19,6 +19,7 @@ from app.database import get_session
 from app.domain.document import DocumentStatus, InvalidDocumentStatusTransition
 from app.domain.document_version import (
     DocumentContentIntegrityError,
+    DuplicateDocumentVersionError,
     EmptyDocumentFileError,
     InvalidPdfContentError,
     UnsupportedDocumentFileTypeError,
@@ -207,6 +208,12 @@ def upload_document_version(
     except EmptyDocumentFileError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
+
+    except DuplicateDocumentVersionError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(error)
         ) from error
 
     except (UnsupportedDocumentFileTypeError, InvalidPdfContentError) as error:
