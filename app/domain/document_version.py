@@ -23,6 +23,11 @@ class DuplicateDocumentVersionError(ValueError):
         super().__init__("This document version has already been uploaded")
 
 
+class DocumentFileTooLargeError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("Document file exceeds maximum upload size")
+
+
 def validate_document_file(
     *,
     content_type: str,

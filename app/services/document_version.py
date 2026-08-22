@@ -1,4 +1,5 @@
 from hashlib import sha256
+from typing import BinaryIO
 from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.document_version import (
     DocumentContentIntegrityError,
+    DocumentFileTooLargeError,
     DuplicateDocumentVersionError,
     validate_document_file,
 )
@@ -93,5 +95,18 @@ def read_document_version_content(
 
     if actual_checksum != document_version.checksum_sha256:
         raise DocumentContentIntegrityError()
+
+    return content
+
+
+def read_document_file(
+    file: BinaryIO,
+    *,
+    max_size_bytes: int,
+) -> bytes:
+    content = file.read(max_size_bytes + 1)
+
+    if len(content) > max_size_bytes:
+        raise DocumentFileTooLargeError()
 
     return content

@@ -2,6 +2,8 @@ from datetime import datetime
 from hashlib import sha256
 from uuid import UUID, uuid4
 
+from app.config import settings
+
 
 def test_uploads_first_document_version(client, document_storage_path):
     create_response = client.post(
@@ -502,3 +504,89 @@ def test_rejects_corrupted_document_version_content(
 
     assert response.status_code == 409
     assert response.json() == {"detail": "Document content failed integrity check"}
+
+
+def test_accepts_document_file_at_upload_limit(
+    client,
+    document_storage_path,
+):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    maximum_size_bytes = settings.document_max_upload_size_bytes
+    pdf_header = b"%PDF-1.7\n"
+    file_content = pdf_header + (b"x" * (maximum_size_bytes - len(pdf_header)))
+
+    assert len(file_content) == maximum_size_bytes
+
+    upload_response = client.post(
+        f"/documents/{document['id']}/versions",
+        files={
+            "file": (
+                "cooling-design.pdf",
+                file_content,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert upload_response.status_code == 201
+
+    uploaded_version = upload_response.json()
+
+    assert uploaded_version["size_bytes"] == maximum_size_bytes
+
+    stored_files = [path for path in document_storage_path.rglob("*") if path.is_file()]
+
+    assert len(stored_files) == 1
+    assert stored_files[0].stat().st_size == maximum_size_bytes
+
+
+def test_rejects_document_file_exceeding_upload_limit(
+    client,
+    document_storage_path,
+):
+    create_response = client.post(
+        "/documents",
+        json={
+            "title": "Cooling system",
+            "file_name": "cooling-design.pdf",
+        },
+    )
+    assert create_response.status_code == 201
+
+    document = create_response.json()
+
+    maximum_size_bytes = settings.document_max_upload_size_bytes
+    oversized_content = b"%PDF-1.7\n" + (b"x" * maximum_size_bytes)
+
+    upload_response = client.post(
+        f"/documents/{document['id']}/versions",
+        files={
+            "file": (
+                "cooling-design.pdf",
+                oversized_content,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert upload_response.status_code == 413
+    assert upload_response.json() == {
+        "detail": "Document file exceeds maximum upload size"
+    }
+
+    versions_response = client.get(f"/documents/{document['id']}/versions")
+    assert versions_response.status_code == 200
+    assert versions_response.json()["total"] == 0
+
+    stored_files = [path for path in document_storage_path.rglob("*") if path.is_file()]
+    assert stored_files == []
