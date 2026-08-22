@@ -13,6 +13,11 @@ class InvalidPdfContentError(ValueError):
         super().__init__("Uploaded content is not a valid PDF")
 
 
+class DocumentContentIntegrityError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("Document content failed integrity check")
+
+
 def validate_document_file(
     *,
     content_type: str,

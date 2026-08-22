@@ -44,3 +44,45 @@ def create_document_version(
     session.flush()
 
     return document_version
+
+
+def list_document_versions(
+    session: Session, document_id: UUID, offset: int, limit: int
+) -> list[DocumentVersion]:
+    statement = (
+        select(DocumentVersion)
+        .where(DocumentVersion.document_id == document_id)
+        .order_by(DocumentVersion.version_number.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    return list(session.scalars(statement).all())
+
+
+def count_document_versions(
+    session: Session,
+    *,
+    document_id: UUID,
+) -> int:
+    statement = (
+        select(func.count())
+        .select_from(DocumentVersion)
+        .where(DocumentVersion.document_id == document_id)
+    )
+
+    return session.scalar(statement) or 0
+
+
+def get_document_version_by_number(
+    session: Session,
+    *,
+    document_id: UUID,
+    version_number: int,
+) -> DocumentVersion | None:
+    statement = select(DocumentVersion).where(
+        DocumentVersion.document_id == document_id,
+        DocumentVersion.version_number == version_number,
+    )
+
+    return session.scalar(statement)

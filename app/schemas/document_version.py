@@ -15,3 +15,10 @@ class DocumentVersionResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentVersionListResponse(BaseModel):
+    items: list[DocumentVersionResponse]
+    total: int
+    offset: int
+    limit: int

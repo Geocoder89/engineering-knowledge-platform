@@ -3,7 +3,10 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from app.domain.document_version import validate_document_file
+from app.domain.document_version import (
+    DocumentContentIntegrityError,
+    validate_document_file,
+)
 from app.models.document_version import DocumentVersion
 from app.repositories import document_version as document_version_repository
 from app.storage.base import DocumentStorage
@@ -47,3 +50,19 @@ def upload_document_version(
     except Exception:
         storage.delete(key=storage_key)
         raise
+
+
+def read_document_version_content(
+    storage: DocumentStorage,
+    *,
+    document_version: DocumentVersion,
+) -> bytes:
+    content = storage.read(
+        key=document_version.storage_key,
+    )
+    actual_checksum = sha256(content).hexdigest()
+
+    if actual_checksum != document_version.checksum_sha256:
+        raise DocumentContentIntegrityError()
+
+    return content
