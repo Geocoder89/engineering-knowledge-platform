@@ -11,7 +11,10 @@ from app.domain.document_version import (
     DuplicateDocumentVersionError,
     validate_document_file,
 )
+from app.extraction.pdf import PypdfDocumentTextExtractor
+from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
+from app.repositories import document_page as document_page_repository
 from app.repositories import document_version as document_version_repository
 from app.storage.base import DocumentStorage
 
@@ -97,6 +100,27 @@ def read_document_version_content(
         raise DocumentContentIntegrityError()
 
     return content
+
+
+def extract_document_version_pages(
+    session: Session,
+    storage: DocumentStorage,
+    *,
+    document_version: DocumentVersion,
+) -> list[DocumentPage]:
+    content = read_document_version_content(
+        storage,
+        document_version=document_version,
+    )
+
+    extractor = PypdfDocumentTextExtractor()
+    extraction = extractor.extract(content=content)
+
+    return document_page_repository.replace_document_pages(
+        session,
+        document_version_id=document_version.id,
+        pages=extraction.pages,
+    )
 
 
 def read_document_file(
