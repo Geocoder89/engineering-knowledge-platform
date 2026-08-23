@@ -42,6 +42,10 @@ def client(document_storage_path: Path) -> Generator[TestClient, None, None]:
             yield test_client
     finally:
         app.dependency_overrides.pop(get_session, None)
+        app.dependency_overrides.pop(
+            get_document_storage,
+            None,
+        )
 
         if outer_transaction.is_active:
             outer_transaction.rollback()
