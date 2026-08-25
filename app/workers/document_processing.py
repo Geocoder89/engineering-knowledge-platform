@@ -1,8 +1,11 @@
-import time
-from typing import NoReturn
+import logging
+import signal
+from threading import Event
+from types import FrameType
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.document_processing_job import (
     DocumentProcessingJob,
@@ -16,7 +19,9 @@ from app.services import (
 from app.storage.base import DocumentStorage
 from app.storage.dependencies import get_document_storage
 
-POLL_INTERVAL_SECONDS = 1.0
+logger = logging.getLogger(__name__)
+
+POLL_INTERVAL_SECONDS = settings.document_processing_poll_interval_seconds
 
 
 def process_next_document_job(
@@ -30,6 +35,15 @@ def process_next_document_job(
     if processing_job is None:
         return None
 
+    logger.info(
+        "Document processing job claimed",
+        extra={
+            "processing_job_id": str(processing_job.id),
+            "document_version_id": str(processing_job.document_version_id),
+            "attempt_count": processing_job.attempt_count,
+        },
+    )
+
     return document_processing_service.process_document_job(
         session,
         storage,
@@ -37,19 +51,93 @@ def process_next_document_job(
     )
 
 
-def run_document_processing_worker() -> NoReturn:
-    storage = get_document_storage()
+def install_shutdown_signal_handlers(
+    stop_event: Event,
+) -> None:
+    def request_shutdown(
+        signal_number: int,
+        _frame: FrameType | None,
+    ) -> None:
+        logger.info(
+            "Document processing worker shutdown requested",
+            extra={
+                "signal_number": signal_number,
+            },
+        )
+        stop_event.set()
 
-    while True:
-        with SessionLocal.begin() as session:
-            processed_job = process_next_document_job(
-                session,
-                storage,
+    signal.signal(
+        signal.SIGINT,
+        request_shutdown,
+    )
+    signal.signal(
+        signal.SIGTERM,
+        request_shutdown,
+    )
+
+
+def run_worker_iteration(
+    storage: DocumentStorage,
+) -> DocumentProcessingJob | None:
+    with SessionLocal.begin() as session:
+        return process_next_document_job(
+            session,
+            storage,
+        )
+
+
+def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format=("%(asctime)s %(levelname)s %(name)s %(message)s"),
+    )
+
+    stop_event = Event()
+    install_shutdown_signal_handlers(stop_event)
+
+    run_document_processing_worker(
+        stop_event=stop_event,
+    )
+
+
+def run_document_processing_worker(
+    *,
+    stop_event: Event | None = None,
+    storage: DocumentStorage | None = None,
+    poll_interval_seconds: float = POLL_INTERVAL_SECONDS,
+) -> None:
+    shutdown_event = stop_event or Event()
+    worker_storage = storage or get_document_storage()
+
+    logger.info(
+        "Document processing worker started",
+        extra={
+            "poll_interval_seconds": poll_interval_seconds,
+        },
+    )
+
+    try:
+        while not shutdown_event.is_set():
+            processed_job = run_worker_iteration(
+                worker_storage,
             )
 
-        if processed_job is None:
-            time.sleep(POLL_INTERVAL_SECONDS)
+            if processed_job is None:
+                shutdown_event.wait(poll_interval_seconds)
+                continue
+
+            logger.info(
+                "Document processing job finished",
+                extra={
+                    "processing_job_id": str(processed_job.id),
+                    "document_version_id": str(processed_job.document_version_id),
+                    "status": processed_job.status,
+                    "attempt_count": (processed_job.attempt_count),
+                },
+            )
+    finally:
+        logger.info("Document processing worker stopped")
 
 
 if __name__ == "__main__":
-    run_document_processing_worker()
+    main()
