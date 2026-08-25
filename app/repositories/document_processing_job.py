@@ -4,6 +4,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.document_processing_job import (
+    validate_processing_job_retry,
+)
 from app.models.document_processing_job import (
     DocumentProcessingJob,
 )
@@ -100,21 +103,6 @@ def fail_processing_job(
     return processing_job
 
 
-def requeue_processing_job(
-    session: Session,
-    *,
-    processing_job: DocumentProcessingJob,
-) -> DocumentProcessingJob:
-    processing_job.status = "queued"
-    processing_job.error_message = None
-    processing_job.started_at = None
-    processing_job.completed_at = None
-
-    session.flush()
-
-    return processing_job
-
-
 def claim_next_processing_job(session: Session) -> DocumentProcessingJob | None:
     statement = (
         select(DocumentProcessingJob)
@@ -133,3 +121,23 @@ def claim_next_processing_job(session: Session) -> DocumentProcessingJob | None:
         return None
 
     return start_processing_job(session, processing_job=processing_job)
+
+
+def requeue_processing_job(
+    session: Session,
+    *,
+    processing_job: DocumentProcessingJob,
+) -> DocumentProcessingJob:
+    validate_processing_job_retry(
+        status=processing_job.status,
+        attempt_count=processing_job.attempt_count,
+    )
+
+    processing_job.status = "queued"
+    processing_job.error_message = None
+    processing_job.started_at = None
+    processing_job.completed_at = None
+
+    session.flush()
+
+    return processing_job

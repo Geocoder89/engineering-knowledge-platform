@@ -1,3 +1,7 @@
+from unittest.mock import Mock
+from uuid import uuid4
+
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -332,3 +336,45 @@ def test_repository_claims_queued_jobs_once() -> None:
             outer_transaction.rollback()
 
         connection.close()
+
+
+def test_repository_rejects_requeue_after_maximum_attempts() -> None:
+    session = Mock(spec=Session)
+    processing_job = DocumentProcessingJob(
+        document_version_id=uuid4(),
+        status="failed",
+        attempt_count=3,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=("Processing job has reached the maximum of 3 attempts"),
+    ):
+        processing_job_repository.requeue_processing_job(
+            session,
+            processing_job=processing_job,
+        )
+
+    session.flush.assert_not_called()
+
+
+def test_repository_rejects_requeue_when_job_is_not_failed() -> None:
+    session = Mock(spec=Session)
+    processing_job = DocumentProcessingJob(
+        document_version_id=uuid4(),
+        status="completed",
+        attempt_count=1,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Only failed processing jobs can be retried; current status is 'completed'"
+        ),
+    ):
+        processing_job_repository.requeue_processing_job(
+            session,
+            processing_job=processing_job,
+        )
+
+    session.flush.assert_not_called()

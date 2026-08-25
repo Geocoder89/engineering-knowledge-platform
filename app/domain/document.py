@@ -24,11 +24,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[
             DocumentStatus.FAILED,
         }
     ),
-    DocumentStatus.FAILED: frozenset(
-        {
-            DocumentStatus.PENDING,
-        }
-    ),
+    DocumentStatus.FAILED: frozenset(),
     DocumentStatus.READY: frozenset(
         {
             DocumentStatus.ARCHIVED,
