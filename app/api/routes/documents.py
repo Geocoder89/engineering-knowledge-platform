@@ -31,6 +31,7 @@ from app.domain.document_version import (
     UnsupportedDocumentFileTypeError,
 )
 from app.models.document import Document
+from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
 from app.repositories import document as document_repository
 from app.repositories import (
@@ -44,6 +45,7 @@ from app.schemas.document import (
     DocumentStatusUpdate,
     DocumentUpdate,
 )
+from app.schemas.document_processing_job import DocumentProcessingJobResponse
 from app.schemas.document_version import (
     DocumentVersionListResponse,
     DocumentVersionResponse,
@@ -339,6 +341,52 @@ def retry_document_version_processing(
         ) from error
 
     return document
+
+
+@router.get(
+    "/{document_id}/versions/{version_number}/processing-job",
+    response_model=DocumentProcessingJobResponse,
+)
+def get_document_version_processing_job(
+    document_id: UUID,
+    version_number: Annotated[int, Path(ge=1)],
+    session: SessionDependency,
+) -> DocumentProcessingJob:
+    document = document_repository.get_document_by_id(
+        session,
+        document_id,
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    document_version = document_version_repository.get_document_version_by_number(
+        session,
+        document_id=document.id,
+        version_number=version_number,
+    )
+
+    if document_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document version not found",
+        )
+
+    processing_job = processing_job_repository.get_processing_job_by_document_version(
+        session,
+        document_version_id=document_version.id,
+    )
+
+    if processing_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document processing job not found",
+        )
+
+    return processing_job
 
 
 @router.get(
