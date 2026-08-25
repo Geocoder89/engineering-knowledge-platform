@@ -11,6 +11,10 @@ class Settings(BaseSettings):
         default=10 * 1024 * 1024,
         gt=0,
     )
+    document_processing_poll_interval_seconds: float = Field(
+        default=1.0,
+        gt=0,
+    )
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
