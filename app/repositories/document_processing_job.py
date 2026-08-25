@@ -113,3 +113,23 @@ def requeue_processing_job(
     session.flush()
 
     return processing_job
+
+
+def claim_next_processing_job(session: Session) -> DocumentProcessingJob | None:
+    statement = (
+        select(DocumentProcessingJob)
+        .where(DocumentProcessingJob.status == "queued")
+        .order_by(
+            DocumentProcessingJob.created_at,
+            DocumentProcessingJob.id,
+        )
+        .with_for_update(skip_locked=True)
+        .limit(1)
+    )
+
+    processing_job = session.scalar(statement)
+
+    if processing_job is None:
+        return None
+
+    return start_processing_job(session, processing_job=processing_job)

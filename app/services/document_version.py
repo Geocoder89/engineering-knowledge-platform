@@ -15,6 +15,7 @@ from app.extraction.pdf import PypdfDocumentTextExtractor
 from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
 from app.repositories import document_page as document_page_repository
+from app.repositories import document_processing_job as processing_job_repository
 from app.repositories import document_version as document_version_repository
 from app.storage.base import DocumentStorage
 
@@ -64,7 +65,7 @@ def upload_document_version(
     )
 
     try:
-        return document_version_repository.create_document_version(
+        document_version = document_version_repository.create_document_version(
             session,
             version_id=version_id,
             document_id=document_id,
@@ -75,6 +76,10 @@ def upload_document_version(
             checksum_sha256=sha256(content).hexdigest(),
             storage_key=storage_key,
         )
+        processing_job_repository.get_or_create_processing_job(
+            session, document_version_id=document_version.id
+        )
+        return document_version
     except IntegrityError as error:
         storage.delete(key=storage_key)
 
