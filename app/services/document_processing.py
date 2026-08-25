@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.chunking.text import chunk_text
 from app.domain.document import DocumentStatus
 from app.domain.document_version import DocumentContentIntegrityError
 from app.extraction.base import DocumentTextExtractionError
@@ -7,10 +8,14 @@ from app.models.document import Document
 from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
 from app.repositories import document as document_repository
+from app.repositories import document_chunk as document_chunk_repository
 from app.repositories import document_processing_job as processing_job_repository
 from app.services import document as document_service
 from app.services import document_version as document_version_service
 from app.storage.base import DocumentStorage
+
+DOCUMENT_CHUNK_MAX_CHARACTERS = 1200
+DOCUMENT_CHUNK_OVERLAP_CHARACTERS = 200
 
 
 def process_document_job(
@@ -38,9 +43,21 @@ def process_document_job(
 
     try:
         with session.begin_nested():
-            document_version_service.extract_document_version_pages(
+            document_pages = document_version_service.extract_document_version_pages(
                 session, storage, document_version=document_version
             )
+
+            for document_page in document_pages:
+                chunks = chunk_text(
+                    document_page.text,
+                    max_characters=(DOCUMENT_CHUNK_MAX_CHARACTERS),
+                    overlap_characters=(DOCUMENT_CHUNK_OVERLAP_CHARACTERS),
+                )
+
+                document_chunk_repository.replace_document_chunks(
+                    session, document_page_id=document_page.id, chunks=chunks
+                )
+
     except (
         FileNotFoundError,
         DocumentContentIntegrityError,

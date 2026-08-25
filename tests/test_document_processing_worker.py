@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import engine
 from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_processing_job import (
     DocumentProcessingJob,
@@ -108,6 +109,47 @@ def test_processes_document_job_successfully(
                 (1, "Cooling system requirements", False),
                 (2, "", True),
                 (3, "Electrical system requirements", False),
+            ]
+            persisted_chunks_by_page = []
+
+            for page in persisted_pages:
+                chunk_statement = (
+                    select(DocumentChunk)
+                    .where(DocumentChunk.document_page_id == page.id)
+                    .order_by(DocumentChunk.chunk_index)
+                )
+                page_chunks = list(session.scalars(chunk_statement).all())
+
+                persisted_chunks_by_page.append(
+                    [
+                        (
+                            chunk.chunk_index,
+                            chunk.text,
+                            chunk.start_offset,
+                            chunk.end_offset,
+                        )
+                        for chunk in page_chunks
+                    ]
+                )
+
+            assert persisted_chunks_by_page == [
+                [
+                    (
+                        0,
+                        "Cooling system requirements",
+                        0,
+                        len("Cooling system requirements"),
+                    )
+                ],
+                [],
+                [
+                    (
+                        0,
+                        "Electrical system requirements",
+                        0,
+                        len("Electrical system requirements"),
+                    )
+                ],
             ]
     finally:
         if outer_transaction.is_active:
