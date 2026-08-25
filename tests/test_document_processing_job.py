@@ -261,3 +261,74 @@ def test_repository_requeues_failed_job_for_retry() -> None:
             outer_transaction.rollback()
 
         connection.close()
+
+
+def test_repository_claims_queued_jobs_once() -> None:
+    connection = engine.connect()
+    outer_transaction = connection.begin()
+
+    try:
+        with Session(
+            bind=connection,
+            autoflush=False,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        ) as session:
+            document = Document(
+                title="Cooling system",
+                file_name="cooling-design.pdf",
+                status="pending",
+            )
+            session.add(document)
+            session.flush()
+
+            document_versions = [
+                DocumentVersion(
+                    document_id=document.id,
+                    version_number=version_number,
+                    file_name=f"cooling-design-v{version_number}.pdf",
+                    content_type="application/pdf",
+                    size_bytes=100,
+                    checksum_sha256=checksum_character * 64,
+                    storage_key=(f"{document.id}/version-{version_number}"),
+                )
+                for (
+                    version_number,
+                    checksum_character,
+                ) in (
+                    (1, "e"),
+                    (2, "f"),
+                )
+            ]
+            session.add_all(document_versions)
+            session.flush()
+
+            for document_version in document_versions:
+                processing_job_repository.create_processing_job(
+                    session,
+                    document_version_id=document_version.id,
+                )
+
+            first_claimed_job = processing_job_repository.claim_next_processing_job(
+                session
+            )
+            second_claimed_job = processing_job_repository.claim_next_processing_job(
+                session
+            )
+            no_remaining_job = processing_job_repository.claim_next_processing_job(
+                session
+            )
+
+            assert first_claimed_job is not None
+            assert second_claimed_job is not None
+            assert first_claimed_job.id != second_claimed_job.id
+            assert first_claimed_job.status == "processing"
+            assert second_claimed_job.status == "processing"
+            assert first_claimed_job.attempt_count == 1
+            assert second_claimed_job.attempt_count == 1
+            assert no_remaining_job is None
+    finally:
+        if outer_transaction.is_active:
+            outer_transaction.rollback()
+
+        connection.close()
