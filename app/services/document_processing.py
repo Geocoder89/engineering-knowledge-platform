@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.domain.document import DocumentStatus
 from app.domain.document_version import DocumentContentIntegrityError
 from app.extraction.base import DocumentTextExtractionError
+from app.models.document import Document
 from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
 from app.repositories import document as document_repository
@@ -62,3 +63,15 @@ def process_document_job(
     )
 
     return processing_job
+
+
+def retry_document_processing_job(
+    session: Session, *, document: Document, processing_job: DocumentProcessingJob
+) -> DocumentProcessingJob:
+    requeued_job = processing_job_repository.requeue_processing_job(
+        session, processing_job=processing_job
+    )
+
+    document_service.retry_failed_document(session, document=document)
+
+    return requeued_job

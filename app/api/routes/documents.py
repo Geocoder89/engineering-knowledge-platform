@@ -18,6 +18,10 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_session
 from app.domain.document import DocumentStatus, InvalidDocumentStatusTransition
+from app.domain.document_processing_job import (
+    ProcessingJobNotRetryable,
+    ProcessingJobRetryLimitExceeded,
+)
 from app.domain.document_version import (
     DocumentContentIntegrityError,
     DocumentFileTooLargeError,
@@ -29,6 +33,9 @@ from app.domain.document_version import (
 from app.models.document import Document
 from app.models.document_version import DocumentVersion
 from app.repositories import document as document_repository
+from app.repositories import (
+    document_processing_job as processing_job_repository,
+)
 from app.repositories import document_version as document_version_repository
 from app.schemas.document import (
     DocumentCreate,
@@ -42,6 +49,9 @@ from app.schemas.document_version import (
     DocumentVersionResponse,
 )
 from app.services import document as document_service
+from app.services import (
+    document_processing as document_processing_service,
+)
 from app.services import document_version as document_version_service
 from app.storage.dependencies import DocumentStorageDependency
 
@@ -265,6 +275,70 @@ def get_document_version(
         )
 
     return document_version
+
+
+@router.post(
+    "/{document_id}/versions/{version_number}/retry",
+    response_model=DocumentResponse,
+)
+def retry_document_version_processing(
+    document_id: UUID,
+    version_number: Annotated[int, Path(ge=1)],
+    session: SessionDependency,
+) -> Document:
+    document = document_repository.get_document_by_id(
+        session,
+        document_id,
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    document_version = document_version_repository.get_document_version_by_number(
+        session,
+        document_id=document.id,
+        version_number=version_number,
+    )
+
+    if document_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document version not found",
+        )
+
+    processing_job = processing_job_repository.get_processing_job_by_document_version(
+        session,
+        document_version_id=document_version.id,
+    )
+
+    if processing_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document processing job not found",
+        )
+
+    try:
+        document_processing_service.retry_document_processing_job(
+            session,
+            document=document,
+            processing_job=processing_job,
+        )
+        session.commit()
+    except (
+        InvalidDocumentStatusTransition,
+        ProcessingJobRetryLimitExceeded,
+        ProcessingJobNotRetryable,
+    ) as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+
+    return document
 
 
 @router.get(

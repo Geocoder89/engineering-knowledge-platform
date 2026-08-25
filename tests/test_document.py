@@ -130,7 +130,7 @@ def test_transitions_document_through_valid_statuses(client):
         assert response.json()["status"] == expected_status
 
 
-def test_retries_failed_document(client):
+def test_rejects_retry_through_generic_status_endpoint(client):
     create_response = client.post(
         "/documents",
         json={
@@ -140,7 +140,7 @@ def test_retries_failed_document(client):
     )
     document = create_response.json()
 
-    for expected_status in ("processing", "failed", "pending"):
+    for expected_status in ("processing", "failed"):
         response = client.patch(
             f"/documents/{document['id']}/status",
             json={"status": expected_status},
@@ -148,6 +148,16 @@ def test_retries_failed_document(client):
 
         assert response.status_code == 200
         assert response.json()["status"] == expected_status
+
+    retry_response = client.patch(
+        f"/documents/{document['id']}/status",
+        json={"status": "pending"},
+    )
+
+    assert retry_response.status_code == 409
+    assert retry_response.json() == {
+        "detail": ("Cannot transition document from 'failed' to 'pending'")
+    }
 
 
 def test_rejects_invalid_document_status_transition(client):
