@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
+    )
+
+    openai_api_key: SecretStr | None = None
+    openai_embedding_model: str = Field(
+        default="text-embedding-3-small",
+        min_length=1,
     )
 
 

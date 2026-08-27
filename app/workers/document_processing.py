@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.embeddings.base import EmbeddingProvider
+from app.embeddings.dependencies import get_embedding_provider
 from app.models.document_processing_job import (
     DocumentProcessingJob,
 )
@@ -27,6 +29,8 @@ POLL_INTERVAL_SECONDS = settings.document_processing_poll_interval_seconds
 def process_next_document_job(
     session: Session,
     storage: DocumentStorage,
+    *,
+    embedding_provider: EmbeddingProvider,
 ) -> DocumentProcessingJob | None:
     processing_job = processing_job_repository.claim_next_processing_job(
         session,
@@ -47,6 +51,7 @@ def process_next_document_job(
     return document_processing_service.process_document_job(
         session,
         storage,
+        embedding_provider=embedding_provider,
         processing_job=processing_job,
     )
 
@@ -78,11 +83,12 @@ def install_shutdown_signal_handlers(
 
 def run_worker_iteration(
     storage: DocumentStorage,
+    *,
+    embedding_provider: EmbeddingProvider,
 ) -> DocumentProcessingJob | None:
     with SessionLocal.begin() as session:
         return process_next_document_job(
-            session,
-            storage,
+            session, storage, embedding_provider=embedding_provider
         )
 
 
@@ -93,15 +99,17 @@ def main() -> None:
     )
 
     stop_event = Event()
+    embedding_provider = get_embedding_provider()
     install_shutdown_signal_handlers(stop_event)
 
     run_document_processing_worker(
-        stop_event=stop_event,
+        stop_event=stop_event, embedding_provider=embedding_provider
     )
 
 
 def run_document_processing_worker(
     *,
+    embedding_provider: EmbeddingProvider,
     stop_event: Event | None = None,
     storage: DocumentStorage | None = None,
     poll_interval_seconds: float = POLL_INTERVAL_SECONDS,
@@ -119,7 +127,7 @@ def run_document_processing_worker(
     try:
         while not shutdown_event.is_set():
             processed_job = run_worker_iteration(
-                worker_storage,
+                worker_storage, embedding_provider=embedding_provider
             )
 
             if processed_job is None:
