@@ -19,3 +19,15 @@ def test_rejects_nonpositive_document_worker_poll_interval() -> None:
             database_url=("postgresql://user:password@localhost/test"),
             document_processing_poll_interval_seconds=0,
         )
+
+
+def test_configures_openai_embedding_provider() -> None:
+    configuration = Settings(
+        database_url="postgresql://user:password@localhost/test",
+        openai_api_key="test-api-key",
+        openai_embedding_model="text-embedding-3-small",
+    )
+
+    assert configuration.openai_api_key is not None
+    assert configuration.openai_api_key.get_secret_value() == "test-api-key"
+    assert configuration.openai_embedding_model == "text-embedding-3-small"

@@ -3,14 +3,21 @@ from sqlalchemy.orm import Session
 from app.chunking.text import chunk_text
 from app.domain.document import DocumentStatus
 from app.domain.document_version import DocumentContentIntegrityError
+from app.embeddings.base import (
+    EmbeddingProvider,
+    EmbeddingProviderError,
+    InvalidEmbeddingResponseError,
+)
 from app.extraction.base import DocumentTextExtractionError
 from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
 from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
 from app.repositories import document as document_repository
 from app.repositories import document_chunk as document_chunk_repository
 from app.repositories import document_processing_job as processing_job_repository
 from app.services import document as document_service
+from app.services import document_embedding as document_embedding_service
 from app.services import document_version as document_version_service
 from app.storage.base import DocumentStorage
 
@@ -19,7 +26,11 @@ DOCUMENT_CHUNK_OVERLAP_CHARACTERS = 200
 
 
 def process_document_job(
-    session: Session, storage: DocumentStorage, *, processing_job: DocumentProcessingJob
+    session: Session,
+    storage: DocumentStorage,
+    *,
+    embedding_provider: EmbeddingProvider,
+    processing_job: DocumentProcessingJob,
 ) -> DocumentProcessingJob:
     document_version = session.get(DocumentVersion, processing_job.document_version_id)
 
@@ -46,6 +57,7 @@ def process_document_job(
             document_pages = document_version_service.extract_document_version_pages(
                 session, storage, document_version=document_version
             )
+            document_chunks: list[DocumentChunk] = []
 
             for document_page in document_pages:
                 chunks = chunk_text(
@@ -54,14 +66,23 @@ def process_document_job(
                     overlap_characters=(DOCUMENT_CHUNK_OVERLAP_CHARACTERS),
                 )
 
-                document_chunk_repository.replace_document_chunks(
+                persisted_chunks = document_chunk_repository.replace_document_chunks(
                     session, document_page_id=document_page.id, chunks=chunks
                 )
+                document_chunks.extend(persisted_chunks)
+
+            document_embedding_service.embed_document_chunks(
+                session,
+                embedding_provider=embedding_provider,
+                document_chunks=document_chunks,
+            )
 
     except (
         FileNotFoundError,
         DocumentContentIntegrityError,
         DocumentTextExtractionError,
+        InvalidEmbeddingResponseError,
+        EmbeddingProviderError,
     ) as error:
         processing_job_repository.fail_processing_job(
             session, processing_job=processing_job, error_message=str(error)

@@ -55,6 +55,7 @@ def test_database_persists_document_chunk() -> None:
                 text="Cooling system requirements",
                 start_offset=0,
                 end_offset=27,
+                embedding=[0.25] * 1536,
             )
             session.add(document_chunk)
             session.flush()
@@ -71,6 +72,11 @@ def test_database_persists_document_chunk() -> None:
             assert persisted_chunk.start_offset == 0
             assert persisted_chunk.end_offset == 27
             assert persisted_chunk.created_at is not None
+
+            assert persisted_chunk.embedding is not None
+            assert len(persisted_chunk.embedding) == 1536
+            assert persisted_chunk.embedding[0] == 0.25
+            assert persisted_chunk.embedding[-1] == 0.25
     finally:
         if outer_transaction.is_active:
             outer_transaction.rollback()
