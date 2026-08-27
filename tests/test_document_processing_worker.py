@@ -1,5 +1,6 @@
 import logging
 import signal
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Event
 from typing import Any
@@ -575,13 +576,9 @@ def test_worker_main_builds_embedding_provider(
             InvalidDimensionEmbeddingProvider(),
             "Embedding 0 has 1 dimensions; expected 1536",
         ),
-        (
-            UnavailableEmbeddingProvider(),
-            "OpenAI embedding request failed",
-        ),
     ],
 )
-def test_records_failed_job_for_embedding_error(
+def test_records_failed_job_for_invalid_embedding_response(
     tmp_path: Path,
     embedding_provider: EmbeddingProvider,
     expected_error_message: str,
@@ -633,6 +630,203 @@ def test_records_failed_job_for_embedding_error(
 
             assert failed_job.status == "failed"
             assert failed_job.error_message == expected_error_message
+            assert document.status == "failed"
+
+            persisted_pages = list(
+                session.scalars(
+                    select(DocumentPage).where(
+                        DocumentPage.document_version_id == document_version.id
+                    )
+                ).all()
+            )
+
+            assert persisted_pages == []
+    finally:
+        if outer_transaction.is_active:
+            outer_transaction.rollback()
+
+        connection.close()
+
+
+def test_retries_temporary_embedding_error_after_delay(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    connection = engine.connect()
+    outer_transaction = connection.begin()
+    attempted_at = datetime(
+        2026,
+        8,
+        27,
+        16,
+        0,
+        tzinfo=timezone.utc,
+    )
+
+    monkeypatch.setattr(
+        document_processing_service,
+        "utc_now",
+        lambda: attempted_at,
+        raising=False,
+    )
+
+    try:
+        with Session(
+            bind=connection,
+            autoflush=False,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        ) as session:
+            storage = LocalDocumentStorage(
+                root_path=tmp_path / "document-storage",
+            )
+            document = Document(
+                title="Cooling system",
+                file_name="cooling-design.pdf",
+                status="pending",
+            )
+            session.add(document)
+            session.flush()
+
+            document_version = document_version_service.upload_document_version(
+                session,
+                storage,
+                document_id=document.id,
+                file_name="cooling-design.pdf",
+                content_type="application/pdf",
+                content=build_pdf_with_pages(("Cooling system requirements",)),
+            )
+            processing_job = processing_job_repository.get_or_create_processing_job(
+                session,
+                document_version_id=document_version.id,
+            )
+            processing_job_repository.start_processing_job(
+                session,
+                processing_job=processing_job,
+            )
+
+            scheduled_job = document_processing_service.process_document_job(
+                session,
+                storage,
+                embedding_provider=UnavailableEmbeddingProvider(),
+                processing_job=processing_job,
+            )
+
+            assert scheduled_job.status == "queued"
+            assert scheduled_job.attempt_count == 1
+            assert scheduled_job.error_message == "OpenAI embedding request failed"
+            assert scheduled_job.started_at is None
+            assert scheduled_job.completed_at is None
+            assert scheduled_job.next_attempt_at == (
+                attempted_at + timedelta(seconds=30)
+            )
+            assert document.status == "processing"
+
+            persisted_pages = list(
+                session.scalars(
+                    select(DocumentPage).where(
+                        DocumentPage.document_version_id == document_version.id
+                    )
+                ).all()
+            )
+
+            assert persisted_pages == []
+            scheduled_job.next_attempt_at = datetime(
+                2000,
+                1,
+                1,
+                tzinfo=timezone.utc,
+            )
+            session.flush()
+
+            claimed_retry = processing_job_repository.claim_next_processing_job(session)
+
+            assert claimed_retry is not None
+            assert claimed_retry.id == scheduled_job.id
+            assert claimed_retry.status == "processing"
+            assert claimed_retry.attempt_count == 2
+            assert claimed_retry.next_attempt_at is None
+
+            completed_job = document_processing_service.process_document_job(
+                session,
+                storage,
+                embedding_provider=FakeEmbeddingProvider(),
+                processing_job=claimed_retry,
+            )
+
+            assert completed_job.status == "completed"
+            assert completed_job.attempt_count == 2
+            assert completed_job.error_message is None
+            assert completed_job.completed_at is not None
+            assert completed_job.next_attempt_at is None
+            assert document.status == "ready"
+    finally:
+        if outer_transaction.is_active:
+            outer_transaction.rollback()
+
+        connection.close()
+
+
+def test_fails_temporary_embedding_error_after_maximum_attempts(
+    tmp_path: Path,
+) -> None:
+    connection = engine.connect()
+    outer_transaction = connection.begin()
+
+    try:
+        with Session(
+            bind=connection,
+            autoflush=False,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        ) as session:
+            storage = LocalDocumentStorage(
+                root_path=tmp_path / "document-storage",
+            )
+            document = Document(
+                title="Cooling system",
+                file_name="cooling-design.pdf",
+                status="pending",
+            )
+            session.add(document)
+            session.flush()
+
+            document_version = document_version_service.upload_document_version(
+                session,
+                storage,
+                document_id=document.id,
+                file_name="cooling-design.pdf",
+                content_type="application/pdf",
+                content=build_pdf_with_pages(("Cooling system requirements",)),
+            )
+            processing_job = processing_job_repository.get_or_create_processing_job(
+                session,
+                document_version_id=document_version.id,
+            )
+
+            # Simulate two previously unsuccessful attempts.
+            processing_job.attempt_count = 2
+            session.flush()
+
+            processing_job_repository.start_processing_job(
+                session,
+                processing_job=processing_job,
+            )
+
+            assert processing_job.attempt_count == 3
+
+            failed_job = document_processing_service.process_document_job(
+                session,
+                storage,
+                embedding_provider=UnavailableEmbeddingProvider(),
+                processing_job=processing_job,
+            )
+
+            assert failed_job.status == "failed"
+            assert failed_job.attempt_count == 3
+            assert failed_job.error_message == "OpenAI embedding request failed"
+            assert failed_job.completed_at is not None
+            assert failed_job.next_attempt_at is None
             assert document.status == "failed"
 
             persisted_pages = list(

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -6,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import engine
+from app.domain import document_processing_job as processing_job_domain
 from app.models.document import Document
 from app.models.document_processing_job import (
     DocumentProcessingJob,
@@ -358,6 +360,93 @@ def test_repository_rejects_requeue_after_maximum_attempts() -> None:
     session.flush.assert_not_called()
 
 
+def test_repository_claims_only_jobs_whose_retry_time_has_arrived() -> None:
+    connection = engine.connect()
+    outer_transaction = connection.begin()
+
+    try:
+        with Session(
+            bind=connection,
+            autoflush=False,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        ) as session:
+            document = Document(
+                title="Cooling system",
+                file_name="cooling-design.pdf",
+                status="pending",
+            )
+            session.add(document)
+            session.flush()
+
+            document_versions = [
+                DocumentVersion(
+                    document_id=document.id,
+                    version_number=version_number,
+                    file_name=f"cooling-design-v{version_number}.pdf",
+                    content_type="application/pdf",
+                    size_bytes=100,
+                    checksum_sha256=checksum_character * 64,
+                    storage_key=f"{document.id}/version-{version_number}",
+                )
+                for version_number, checksum_character in (
+                    (1, "g"),
+                    (2, "h"),
+                )
+            ]
+            session.add_all(document_versions)
+            session.flush()
+
+            now = datetime.now(timezone.utc)
+
+            delayed_job = DocumentProcessingJob(
+                document_version_id=document_versions[0].id,
+                created_at=now - timedelta(minutes=1),
+                next_attempt_at=now + timedelta(hours=1),
+            )
+            available_job = DocumentProcessingJob(
+                document_version_id=document_versions[1].id,
+                created_at=now,
+                next_attempt_at=None,
+            )
+            session.add_all(
+                [
+                    delayed_job,
+                    available_job,
+                ]
+            )
+            session.flush()
+
+            claimed_job = processing_job_repository.claim_next_processing_job(session)
+            no_due_job = processing_job_repository.claim_next_processing_job(session)
+
+            assert claimed_job is not None
+            assert claimed_job.id == available_job.id
+            assert claimed_job.status == "processing"
+            assert claimed_job.attempt_count == 1
+            assert claimed_job.next_attempt_at is None
+
+            assert no_due_job is None
+            assert delayed_job.status == "queued"
+            assert delayed_job.attempt_count == 0
+
+            delayed_job.next_attempt_at = now - timedelta(seconds=1)
+            session.flush()
+
+            retried_job = processing_job_repository.claim_next_processing_job(session)
+
+            assert retried_job is not None
+            assert retried_job.id == delayed_job.id
+            assert retried_job.status == "processing"
+            assert retried_job.attempt_count == 1
+            assert retried_job.next_attempt_at is None
+    finally:
+        if outer_transaction.is_active:
+            outer_transaction.rollback()
+
+        connection.close()
+
+
 def test_repository_rejects_requeue_when_job_is_not_failed() -> None:
     session = Mock(spec=Session)
     processing_job = DocumentProcessingJob(
@@ -378,3 +467,75 @@ def test_repository_rejects_requeue_when_job_is_not_failed() -> None:
         )
 
     session.flush.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    (
+        "attempt_count",
+        "expected_delay",
+    ),
+    [
+        (
+            1,
+            timedelta(seconds=30),
+        ),
+        (
+            2,
+            timedelta(seconds=60),
+        ),
+    ],
+)
+def test_calculates_exponential_processing_retry_time(
+    attempt_count: int,
+    expected_delay: timedelta,
+) -> None:
+    attempted_at = datetime(
+        2026,
+        8,
+        27,
+        16,
+        0,
+        tzinfo=timezone.utc,
+    )
+
+    next_attempt_at = processing_job_domain.calculate_processing_job_retry_at(
+        attempted_at=attempted_at,
+        attempt_count=attempt_count,
+    )
+
+    assert next_attempt_at == attempted_at + expected_delay
+
+
+def test_repository_schedules_processing_job_for_delayed_retry() -> None:
+    session = Mock(spec=Session)
+    attempted_at = datetime(
+        2026,
+        8,
+        27,
+        16,
+        0,
+        tzinfo=timezone.utc,
+    )
+    processing_job = DocumentProcessingJob(
+        document_version_id=uuid4(),
+        status="processing",
+        attempt_count=1,
+        started_at=attempted_at,
+    )
+
+    scheduled_job = processing_job_repository.schedule_processing_job_retry(
+        session,
+        processing_job=processing_job,
+        error_message="OpenAI embedding request failed",
+        attempted_at=attempted_at,
+    )
+
+    assert scheduled_job is processing_job
+    assert scheduled_job.status == "queued"
+    assert scheduled_job.attempt_count == 1
+    assert scheduled_job.error_message == "OpenAI embedding request failed"
+    assert scheduled_job.started_at is None
+    assert scheduled_job.completed_at is None
+    assert scheduled_job.next_attempt_at == (attempted_at + timedelta(seconds=30))
+
+    session.flush.assert_called_once_with()

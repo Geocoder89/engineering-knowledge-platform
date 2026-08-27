@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.document_processing_job import (
+    calculate_processing_job_retry_at,
     validate_processing_job_retry,
 )
 from app.models.document_processing_job import (
@@ -68,6 +69,7 @@ def start_processing_job(
     processing_job.started_at = datetime.now(timezone.utc)
     processing_job.completed_at = None
     processing_job.error_message = None
+    processing_job.next_attempt_at = None
 
     session.flush()
 
@@ -82,6 +84,7 @@ def complete_processing_job(
     processing_job.status = "completed"
     processing_job.completed_at = datetime.now(timezone.utc)
     processing_job.error_message = None
+    processing_job.next_attempt_at = None
 
     session.flush()
 
@@ -97,6 +100,30 @@ def fail_processing_job(
     processing_job.status = "failed"
     processing_job.error_message = error_message
     processing_job.completed_at = datetime.now(timezone.utc)
+    processing_job.next_attempt_at = None
+
+    session.flush()
+
+    return processing_job
+
+
+def schedule_processing_job_retry(
+    session: Session,
+    *,
+    processing_job: DocumentProcessingJob,
+    error_message: str,
+    attempted_at: datetime,
+) -> DocumentProcessingJob:
+    next_attempt_at = calculate_processing_job_retry_at(
+        attempted_at=attempted_at,
+        attempt_count=processing_job.attempt_count,
+    )
+
+    processing_job.status = "queued"
+    processing_job.error_message = error_message
+    processing_job.started_at = None
+    processing_job.completed_at = None
+    processing_job.next_attempt_at = next_attempt_at
 
     session.flush()
 
@@ -106,7 +133,13 @@ def fail_processing_job(
 def claim_next_processing_job(session: Session) -> DocumentProcessingJob | None:
     statement = (
         select(DocumentProcessingJob)
-        .where(DocumentProcessingJob.status == "queued")
+        .where(
+            DocumentProcessingJob.status == "queued",
+            or_(
+                DocumentProcessingJob.next_attempt_at.is_(None),
+                DocumentProcessingJob.next_attempt_at <= func.now(),
+            ),
+        )
         .order_by(
             DocumentProcessingJob.created_at,
             DocumentProcessingJob.id,
@@ -137,6 +170,7 @@ def requeue_processing_job(
     processing_job.error_message = None
     processing_job.started_at = None
     processing_job.completed_at = None
+    processing_job.next_attempt_at = None
 
     session.flush()
 
