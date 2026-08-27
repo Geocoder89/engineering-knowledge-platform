@@ -1,7 +1,12 @@
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from app.chunking.text import chunk_text
 from app.domain.document import DocumentStatus
+from app.domain.document_processing_job import (
+    MAX_PROCESSING_ATTEMPTS,
+)
 from app.domain.document_version import DocumentContentIntegrityError
 from app.embeddings.base import (
     EmbeddingProvider,
@@ -20,6 +25,11 @@ from app.services import document as document_service
 from app.services import document_embedding as document_embedding_service
 from app.services import document_version as document_version_service
 from app.storage.base import DocumentStorage
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 DOCUMENT_CHUNK_MAX_CHARACTERS = 1200
 DOCUMENT_CHUNK_OVERLAP_CHARACTERS = 200
@@ -48,10 +58,18 @@ def process_document_job(
     #     session, processing_job=processing_job
     # )
 
-    document_service.transition_document_status(
-        session, document=document, target_status=DocumentStatus.PROCESSING
-    )
+    current_document_status = DocumentStatus(document.status)
 
+    if current_document_status == DocumentStatus.PENDING:
+        document_service.transition_document_status(
+            session,
+            document=document,
+            target_status=DocumentStatus.PROCESSING,
+        )
+    elif current_document_status != DocumentStatus.PROCESSING:
+        raise RuntimeError(
+            "Document must be pending or processing to run a processing job"
+        )
     try:
         with session.begin_nested():
             document_pages = document_version_service.extract_document_version_pages(
@@ -82,7 +100,6 @@ def process_document_job(
         DocumentContentIntegrityError,
         DocumentTextExtractionError,
         InvalidEmbeddingResponseError,
-        EmbeddingProviderError,
     ) as error:
         processing_job_repository.fail_processing_job(
             session, processing_job=processing_job, error_message=str(error)
@@ -91,6 +108,29 @@ def process_document_job(
         document_service.transition_document_status(
             session, document=document, target_status=DocumentStatus.FAILED
         )
+        return processing_job
+    except EmbeddingProviderError as error:
+        if processing_job.attempt_count >= MAX_PROCESSING_ATTEMPTS:
+            processing_job_repository.fail_processing_job(
+                session,
+                processing_job=processing_job,
+                error_message=str(error),
+            )
+
+            document_service.transition_document_status(
+                session,
+                document=document,
+                target_status=DocumentStatus.FAILED,
+            )
+            return processing_job
+
+        processing_job_repository.schedule_processing_job_retry(
+            session,
+            processing_job=processing_job,
+            error_message=str(error),
+            attempted_at=utc_now(),
+        )
+
         return processing_job
 
     processing_job_repository.complete_processing_job(
