@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     String,
     Text,
     Uuid,
@@ -42,6 +43,38 @@ class Decision(Base):
         default="draft",
         server_default="draft",
         index=True,
+    )
+
+    selected_alternative_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "decision_alternatives.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name=("fk_decisions_selected_alternative_id"),
+        ),
+        nullable=True,
+        index=True,
+    )
+    rationale: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

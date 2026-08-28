@@ -1,12 +1,13 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.decision_evidence import (
     DecisionEvidenceCitation,
 )
 from app.domain.document import DocumentStatus
+from app.models.decision_alternative import DecisionAlternative
 from app.models.decision_evidence import DecisionEvidence
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
@@ -191,3 +192,23 @@ def delete_decision_evidence(
         evidence,
     )
     session.flush()
+
+
+def count_decision_evidence_for_decision(
+    session: Session,
+    *,
+    decision_id: UUID,
+) -> int:
+    statement = (
+        select(func.count())
+        .select_from(DecisionEvidence)
+        .join(
+            DecisionAlternative,
+            DecisionAlternative.id == DecisionEvidence.decision_alternative_id,
+        )
+        .where(
+            DecisionAlternative.decision_id == decision_id,
+        )
+    )
+
+    return session.scalar(statement) or 0
