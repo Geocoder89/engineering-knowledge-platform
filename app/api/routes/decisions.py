@@ -2,20 +2,33 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_session
+from app.domain.decision_evidence import (
+    DecisionEvidenceCitation,
+)
+from app.domain.document import DocumentStatus
 from app.models.decision import Decision
 from app.models.decision_alternative import DecisionAlternative
 from app.repositories import decision as decision_repository
 from app.repositories import (
     decision_alternative as decision_alternative_repository,
 )
+from app.repositories import (
+    decision_evidence as decision_evidence_repository,
+)
 from app.schemas.decision import DecisionCreate, DecisionListResponse, DecisionResponse
 from app.schemas.decision_alternative import (
     DecisionAlternativeCreate,
     DecisionAlternativeResponse,
     DecisionAlternativeUpdate,
+)
+from app.schemas.decision_evidence import (
+    DecisionEvidenceCitationResponse,
+    DecisionEvidenceCreate,
+    DecisionEvidenceResponse,
 )
 
 router = APIRouter(
@@ -27,6 +40,32 @@ SessionDependency = Annotated[
     Session,
     Depends(get_session),
 ]
+
+
+def build_decision_evidence_response(
+    evidence: DecisionEvidenceCitation,
+) -> DecisionEvidenceResponse:
+    return DecisionEvidenceResponse(
+        id=evidence.decision_evidence_id,
+        decision_alternative_id=(evidence.decision_alternative_id),
+        document_chunk_id=evidence.document_chunk_id,
+        evidence_type=evidence.evidence_type,
+        relevance_note=evidence.relevance_note,
+        created_at=evidence.created_at,
+        chunk_index=evidence.chunk_index,
+        text=evidence.text,
+        start_offset=evidence.start_offset,
+        end_offset=evidence.end_offset,
+        citation=DecisionEvidenceCitationResponse(
+            document_id=evidence.document_id,
+            document_version_id=(evidence.document_version_id),
+            document_page_id=evidence.document_page_id,
+            document_title=evidence.document_title,
+            file_name=evidence.file_name,
+            version_number=evidence.version_number,
+            page_number=evidence.page_number,
+        ),
+    )
 
 
 @router.post(
@@ -241,6 +280,201 @@ def delete_decision_alternative(
     decision_alternative_repository.delete_decision_alternative(
         session,
         alternative=alternative,
+    )
+
+    session.commit()
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+
+
+@router.post(
+    ("/{decision_id}/alternatives/{alternative_id}/evidence"),
+    response_model=DecisionEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_decision_evidence(
+    decision_id: UUID,
+    alternative_id: UUID,
+    evidence: DecisionEvidenceCreate,
+    session: SessionDependency,
+) -> DecisionEvidenceResponse:
+    decision = decision_repository.get_decision_by_id(
+        session,
+        decision_id,
+    )
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    alternative = decision_alternative_repository.get_decision_alternative_by_id(
+        session,
+        decision_id=decision.id,
+        alternative_id=alternative_id,
+    )
+
+    if alternative is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision alternative not found",
+        )
+
+    document_status = decision_evidence_repository.get_document_chunk_source_status(
+        session,
+        document_chunk_id=evidence.document_chunk_id,
+    )
+
+    if document_status is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document chunk not found",
+        )
+
+    if document_status != DocumentStatus.READY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("Document chunk is not available for evidence"),
+        )
+    try:
+        created_evidence = decision_evidence_repository.create_decision_evidence(
+            session,
+            decision_alternative_id=alternative.id,
+            document_chunk_id=evidence.document_chunk_id,
+            evidence_type=evidence.evidence_type,
+            relevance_note=evidence.relevance_note,
+        )
+
+    except IntegrityError as error:
+        session.rollback()
+
+        diagnostics = getattr(
+            error.orig,
+            "diag",
+            None,
+        )
+        constraint_name = getattr(
+            diagnostics,
+            "constraint_name",
+            None,
+        )
+
+        if constraint_name != ("uq_decision_evidence_alternative_chunk"):
+            raise
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("Document chunk is already linked to this decision alternative"),
+        ) from error
+
+    citations = decision_evidence_repository.list_decision_evidence(
+        session,
+        decision_alternative_id=alternative.id,
+    )
+    created_citation = next(
+        citation
+        for citation in citations
+        if citation.decision_evidence_id == created_evidence.id
+    )
+
+    session.commit()
+
+    return build_decision_evidence_response(
+        created_citation,
+    )
+
+
+@router.get(
+    ("/{decision_id}/alternatives/{alternative_id}/evidence"),
+    response_model=list[DecisionEvidenceResponse],
+)
+def list_decision_evidence(
+    decision_id: UUID,
+    alternative_id: UUID,
+    session: SessionDependency,
+) -> list[DecisionEvidenceResponse]:
+    decision = decision_repository.get_decision_by_id(
+        session,
+        decision_id,
+    )
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    alternative = decision_alternative_repository.get_decision_alternative_by_id(
+        session,
+        decision_id=decision.id,
+        alternative_id=alternative_id,
+    )
+
+    if alternative is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision alternative not found",
+        )
+
+    citations = decision_evidence_repository.list_decision_evidence(
+        session,
+        decision_alternative_id=alternative.id,
+    )
+
+    return [build_decision_evidence_response(citation) for citation in citations]
+
+
+@router.delete(
+    ("/{decision_id}/alternatives/{alternative_id}/evidence/{decision_evidence_id}"),
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_decision_evidence(
+    decision_id: UUID,
+    alternative_id: UUID,
+    decision_evidence_id: UUID,
+    session: SessionDependency,
+) -> Response:
+    decision = decision_repository.get_decision_by_id(
+        session,
+        decision_id,
+    )
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    alternative = decision_alternative_repository.get_decision_alternative_by_id(
+        session,
+        decision_id=decision.id,
+        alternative_id=alternative_id,
+    )
+
+    if alternative is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision alternative not found",
+        )
+
+    evidence = decision_evidence_repository.get_decision_evidence_by_id(
+        session,
+        decision_alternative_id=alternative.id,
+        decision_evidence_id=decision_evidence_id,
+    )
+
+    if evidence is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision evidence not found",
+        )
+
+    decision_evidence_repository.delete_decision_evidence(
+        session,
+        evidence=evidence,
     )
 
     session.commit()
