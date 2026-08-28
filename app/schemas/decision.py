@@ -24,6 +24,24 @@ DecisionQuestion = Annotated[
     ),
 ]
 
+DecisionRationale = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=10,
+        max_length=4000,
+    ),
+]
+
+
+class DecisionOutcomeCreate(BaseModel):
+    selected_alternative_id: UUID
+    rationale: DecisionRationale
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
 
 class DecisionCreate(BaseModel):
     title: DecisionTitle
@@ -47,3 +65,20 @@ class DecisionListResponse(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class DecisionReviewResponse(DecisionResponse):
+    selected_alternative_id: UUID | None
+    rationale: str | None
+    submitted_at: datetime | None
+    decided_at: datetime | None
+    cancelled_at: datetime | None
+    superseded_at: datetime | None
+
+
+class DecisionCancellationCreate(BaseModel):
+    rationale: DecisionRationale
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )

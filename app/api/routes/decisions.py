@@ -6,6 +6,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_session
+from app.domain.decision import (
+    DecisionNotEditable,
+    DecisionReviewRequirementsNotMet,
+    DecisionStatus,
+    InvalidDecisionStatusTransition,
+    SelectedAlternativeNotPartOfDecision,
+    validate_decision_is_editable,
+)
 from app.domain.decision_evidence import (
     DecisionEvidenceCitation,
 )
@@ -19,7 +27,14 @@ from app.repositories import (
 from app.repositories import (
     decision_evidence as decision_evidence_repository,
 )
-from app.schemas.decision import DecisionCreate, DecisionListResponse, DecisionResponse
+from app.schemas.decision import (
+    DecisionCancellationCreate,
+    DecisionCreate,
+    DecisionListResponse,
+    DecisionOutcomeCreate,
+    DecisionResponse,
+    DecisionReviewResponse,
+)
 from app.schemas.decision_alternative import (
     DecisionAlternativeCreate,
     DecisionAlternativeResponse,
@@ -30,6 +45,7 @@ from app.schemas.decision_evidence import (
     DecisionEvidenceCreate,
     DecisionEvidenceResponse,
 )
+from app.services import decision_review as decision_review_service
 
 router = APIRouter(
     prefix="/decisions",
@@ -40,6 +56,20 @@ SessionDependency = Annotated[
     Session,
     Depends(get_session),
 ]
+
+
+def require_editable_decision(
+    decision: Decision,
+) -> None:
+    try:
+        validate_decision_is_editable(
+            DecisionStatus(decision.status),
+        )
+    except DecisionNotEditable as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
 
 
 def build_decision_evidence_response(
@@ -149,7 +179,7 @@ def create_decision_alternative(
     alternative: DecisionAlternativeCreate,
     session: SessionDependency,
 ) -> DecisionAlternative:
-    decision = decision_repository.get_decision_by_id(
+    decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
     )
@@ -159,6 +189,8 @@ def create_decision_alternative(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Decision not found",
         )
+
+    require_editable_decision(decision)
 
     created_alternative = decision_alternative_repository.create_decision_alternative(
         session,
@@ -207,10 +239,12 @@ def update_decision_alternative(
     alternative_update: DecisionAlternativeUpdate,
     session: SessionDependency,
 ) -> DecisionAlternative:
-    decision = decision_repository.get_decision_by_id(
+    decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
     )
+
+    require_editable_decision(decision)
 
     if decision is None:
         raise HTTPException(
@@ -254,7 +288,7 @@ def delete_decision_alternative(
     alternative_id: UUID,
     session: SessionDependency,
 ) -> Response:
-    decision = decision_repository.get_decision_by_id(
+    decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
     )
@@ -264,6 +298,8 @@ def delete_decision_alternative(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Decision not found",
         )
+
+    require_editable_decision(decision)
 
     alternative = decision_alternative_repository.get_decision_alternative_by_id(
         session,
@@ -300,7 +336,7 @@ def create_decision_evidence(
     evidence: DecisionEvidenceCreate,
     session: SessionDependency,
 ) -> DecisionEvidenceResponse:
-    decision = decision_repository.get_decision_by_id(
+    decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
     )
@@ -310,6 +346,10 @@ def create_decision_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Decision not found",
         )
+
+    require_editable_decision(
+        decision,
+    )
 
     alternative = decision_alternative_repository.get_decision_alternative_by_id(
         session,
@@ -437,7 +477,7 @@ def delete_decision_evidence(
     decision_evidence_id: UUID,
     session: SessionDependency,
 ) -> Response:
-    decision = decision_repository.get_decision_by_id(
+    decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
     )
@@ -447,6 +487,10 @@ def delete_decision_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Decision not found",
         )
+
+    require_editable_decision(
+        decision,
+    )
 
     alternative = decision_alternative_repository.get_decision_alternative_by_id(
         session,
@@ -482,3 +526,119 @@ def delete_decision_evidence(
     return Response(
         status_code=status.HTTP_204_NO_CONTENT,
     )
+
+
+@router.post(
+    "/{decision_id}/submit",
+    response_model=DecisionReviewResponse,
+)
+def submit_decision_for_review(
+    decision_id: UUID,
+    session: SessionDependency,
+) -> Decision:
+    decision = decision_repository.get_decision_by_id_for_update(
+        session,
+        decision_id,
+    )
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    try:
+        submitted_decision = decision_review_service.submit_decision_for_review(
+            session,
+            decision=decision,
+        )
+    except (
+        DecisionReviewRequirementsNotMet,
+        InvalidDecisionStatusTransition,
+    ) as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+
+    session.commit()
+
+    return submitted_decision
+
+
+@router.post(
+    "/{decision_id}/decide",
+    response_model=DecisionReviewResponse,
+)
+def decide_decision(
+    decision_id: UUID,
+    outcome: DecisionOutcomeCreate,
+    session: SessionDependency,
+) -> Decision:
+    decision = decision_repository.get_decision_by_id_for_update(
+        session,
+        decision_id,
+    )
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    try:
+        decided_decision = decision_review_service.finalize_decision(
+            session,
+            decision=decision,
+            selected_alternative_id=(outcome.selected_alternative_id),
+            rationale=outcome.rationale,
+        )
+    except (
+        InvalidDecisionStatusTransition,
+        SelectedAlternativeNotPartOfDecision,
+    ) as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+
+    session.commit()
+
+    return decided_decision
+
+
+@router.post(
+    "/{decision_id}/cancel",
+    response_model=DecisionReviewResponse,
+)
+def cancel_decision(
+    decision_id: UUID,
+    cancellation: DecisionCancellationCreate,
+    session: SessionDependency,
+) -> Decision:
+    decision = decision_repository.get_decision_by_id_for_update(
+        session,
+        decision_id,
+    )
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    try:
+        cancelled_decision = decision_review_service.cancel_decision(
+            session,
+            decision=decision,
+            rationale=cancellation.rationale,
+        )
+    except InvalidDecisionStatusTransition as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+
+    session.commit()
+
+    return cancelled_decision

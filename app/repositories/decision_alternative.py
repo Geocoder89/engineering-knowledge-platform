@@ -65,6 +65,22 @@ def list_decision_alternatives(
     )
 
 
+def count_decision_alternatives(
+    session: Session,
+    *,
+    decision_id: UUID,
+) -> int:
+    statement = (
+        select(func.count())
+        .select_from(DecisionAlternative)
+        .where(
+            DecisionAlternative.decision_id == decision_id,
+        )
+    )
+
+    return session.scalar(statement) or 0
+
+
 def get_decision_alternative_by_id(
     session: Session,
     *,
