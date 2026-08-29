@@ -564,3 +564,60 @@ def test_cannot_delete_evidence_through_another_alternative(
 
     assert list_response.status_code == 200
     assert len(list_response.json()) == 1
+
+
+def test_repository_lists_decision_evidence_for_decision(
+    db_session: Session,
+) -> None:
+    graph = create_evidence_test_graph(
+        db_session,
+    )
+
+    second_alternative = DecisionAlternative(
+        decision_id=graph.decision.id,
+        title="Keep the existing pressure limit",
+        description=("Retain the currently approved maximum operating pressure."),
+        position=1,
+    )
+    db_session.add(second_alternative)
+    db_session.flush()
+
+    first_evidence = DecisionEvidence(
+        decision_alternative_id=graph.alternative.id,
+        document_chunk_id=graph.document_chunk.id,
+        evidence_type="supporting",
+        relevance_note=("The source supports reducing the maximum pressure."),
+    )
+    second_evidence = DecisionEvidence(
+        decision_alternative_id=second_alternative.id,
+        document_chunk_id=graph.document_chunk.id,
+        evidence_type="opposing",
+        relevance_note=(
+            "The source identifies a concern with retaining the current limit."
+        ),
+    )
+    db_session.add_all(
+        [
+            second_evidence,
+            first_evidence,
+        ]
+    )
+    db_session.flush()
+
+    citations = decision_evidence_repository.list_decision_evidence_for_decision(
+        db_session,
+        decision_id=graph.decision.id,
+    )
+
+    assert [citation.decision_evidence_id for citation in citations] == [
+        first_evidence.id,
+        second_evidence.id,
+    ]
+    assert [citation.decision_alternative_id for citation in citations] == [
+        graph.alternative.id,
+        second_alternative.id,
+    ]
+    assert citations[0].document_id == graph.document.id
+    assert citations[0].document_version_id == graph.document_version.id
+    assert citations[0].document_page_id == graph.document_page.id
+    assert citations[0].document_chunk_id == graph.document_chunk.id
