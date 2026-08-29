@@ -19,6 +19,9 @@ from app.repositories import (
 from app.repositories import (
     decision_evidence as decision_evidence_repository,
 )
+from app.services import (
+    decision_audit as decision_audit_service,
+)
 
 
 def utc_now() -> datetime:
@@ -45,11 +48,23 @@ def submit_decision_for_review(
         evidence_count=evidence_count,
     )
 
-    return decision_repository.submit_decision_for_review(
+    previous_status = decision.status
+    submitted_at = utc_now()
+
+    submitted_decision = decision_repository.submit_decision_for_review(
         session,
         decision=decision,
-        submitted_at=utc_now(),
+        submitted_at=submitted_at,
     )
+
+    decision_audit_service.record_decision_submitted(
+        session,
+        decision=submitted_decision,
+        previous_status=previous_status,
+        submitted_at=submitted_at,
+    )
+
+    return submitted_decision
 
 
 def finalize_decision(
@@ -75,13 +90,27 @@ def finalize_decision(
     if selected_alternative is None:
         raise SelectedAlternativeNotPartOfDecision()
 
-    return decision_repository.finalize_decision(
+    previous_status = decision.status
+    decided_at = utc_now()
+
+    finalized_decision = decision_repository.finalize_decision(
         session,
         decision=decision,
         selected_alternative_id=selected_alternative.id,
         rationale=rationale,
-        decided_at=utc_now(),
+        decided_at=decided_at,
     )
+
+    decision_audit_service.record_decision_finalized(
+        session,
+        decision=finalized_decision,
+        previous_status=previous_status,
+        selected_alternative_id=selected_alternative.id,
+        rationale=rationale,
+        decided_at=decided_at,
+    )
+
+    return finalized_decision
 
 
 def cancel_decision(
@@ -95,9 +124,22 @@ def cancel_decision(
         DecisionStatus.CANCELLED,
     )
 
-    return decision_repository.cancel_decision(
+    previous_status = decision.status
+    cancelled_at = utc_now()
+
+    cancelled_decision = decision_repository.cancel_decision(
         session,
         decision=decision,
         rationale=rationale,
-        cancelled_at=utc_now(),
+        cancelled_at=cancelled_at,
     )
+
+    decision_audit_service.record_decision_cancelled(
+        session,
+        decision=cancelled_decision,
+        previous_status=previous_status,
+        rationale=rationale,
+        cancelled_at=cancelled_at,
+    )
+
+    return cancelled_decision
