@@ -51,9 +51,15 @@ from app.schemas.decision_evidence import (
     DecisionEvidenceCreate,
     DecisionEvidenceResponse,
 )
+from app.schemas.decision_record import (
+    DecisionRecordAlternativeResponse,
+    DecisionRecordHistorySummaryResponse,
+    DecisionRecordResponse,
+)
 from app.services import (
     decision_audit as decision_audit_service,
 )
+from app.services import decision_record as decision_record_service
 from app.services import decision_review as decision_review_service
 
 router = APIRouter(
@@ -174,6 +180,68 @@ def get_decision(
         )
 
     return decision
+
+
+@router.get(
+    "/{decision_id}/record",
+    response_model=DecisionRecordResponse,
+)
+def get_assembled_decision_record(
+    decision_id: UUID,
+    session: SessionDependency,
+) -> DecisionRecordResponse:
+    record = decision_record_service.get_decision_record(
+        session,
+        decision_id=decision_id,
+    )
+
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    alternatives = [
+        DecisionRecordAlternativeResponse(
+            id=alternative.id,
+            decision_id=alternative.decision_id,
+            title=alternative.title,
+            description=alternative.description,
+            position=alternative.position,
+            created_at=alternative.created_at,
+            updated_at=alternative.updated_at,
+            evidence=[
+                build_decision_evidence_response(citation)
+                for citation in record.evidence_by_alternative_id.get(
+                    alternative.id,
+                    [],
+                )
+            ],
+        )
+        for alternative in record.alternatives
+    ]
+
+    decision = record.decision
+
+    return DecisionRecordResponse(
+        id=decision.id,
+        title=decision.title,
+        question=decision.question,
+        status=decision.status,
+        selected_alternative_id=decision.selected_alternative_id,
+        rationale=decision.rationale,
+        submitted_at=decision.submitted_at,
+        decided_at=decision.decided_at,
+        cancelled_at=decision.cancelled_at,
+        superseded_at=decision.superseded_at,
+        created_at=decision.created_at,
+        updated_at=decision.updated_at,
+        alternatives=alternatives,
+        history=DecisionRecordHistorySummaryResponse(
+            total=record.history_total,
+            url=f"/decisions/{decision.id}/history",
+        ),
+    )
 
 
 # alternatives
