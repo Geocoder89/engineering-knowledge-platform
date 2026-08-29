@@ -8,6 +8,7 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
+from app.models.user import User
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "DocumentPage",
     "DocumentVersion",
     "DocumentProcessingJob",
+    "User",
 ]
