@@ -341,6 +341,7 @@ def test_service_submits_complete_decision_for_review(
     count_alternatives = Mock(
         return_value=2,
     )
+    record_decision_submitted = Mock()
     count_evidence = Mock(
         return_value=1,
     )
@@ -361,6 +362,12 @@ def test_service_submits_complete_decision_for_review(
         lambda: submitted_at,
     )
 
+    monkeypatch.setattr(
+        decision_review_service.decision_audit_service,
+        "record_decision_submitted",
+        record_decision_submitted,
+    )
+
     submitted_decision = decision_review_service.submit_decision_for_review(
         session,
         decision=decision,
@@ -373,6 +380,13 @@ def test_service_submits_complete_decision_for_review(
     count_evidence.assert_called_once_with(
         session,
         decision_id=decision.id,
+    )
+
+    record_decision_submitted.assert_called_once_with(
+        session,
+        decision=submitted_decision,
+        previous_status="draft",
+        submitted_at=submitted_at,
     )
 
     assert submitted_decision is decision

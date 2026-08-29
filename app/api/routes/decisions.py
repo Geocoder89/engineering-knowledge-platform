@@ -25,6 +25,9 @@ from app.repositories import (
     decision_alternative as decision_alternative_repository,
 )
 from app.repositories import (
+    decision_audit as decision_audit_repository,
+)
+from app.repositories import (
     decision_evidence as decision_evidence_repository,
 )
 from app.schemas.decision import (
@@ -40,10 +43,16 @@ from app.schemas.decision_alternative import (
     DecisionAlternativeResponse,
     DecisionAlternativeUpdate,
 )
+from app.schemas.decision_audit import (
+    DecisionAuditHistoryResponse,
+)
 from app.schemas.decision_evidence import (
     DecisionEvidenceCitationResponse,
     DecisionEvidenceCreate,
     DecisionEvidenceResponse,
+)
+from app.services import (
+    decision_audit as decision_audit_service,
 )
 from app.services import decision_review as decision_review_service
 
@@ -113,6 +122,7 @@ def create_decision(
         question=decision.question,
     )
 
+    decision_audit_service.record_decision_created(session, decision=created_decision)
     session.commit()
 
     return created_decision
@@ -199,6 +209,11 @@ def create_decision_alternative(
         description=alternative.description,
     )
 
+    decision_audit_service.record_decision_alternative_added(
+        session,
+        alternative=created_alternative,
+    )
+
     session.commit()
 
     return created_alternative
@@ -244,13 +259,13 @@ def update_decision_alternative(
         decision_id,
     )
 
-    require_editable_decision(decision)
-
     if decision is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Decision not found",
         )
+
+    require_editable_decision(decision)
 
     alternative = decision_alternative_repository.get_decision_alternative_by_id(
         session,
@@ -268,10 +283,33 @@ def update_decision_alternative(
         exclude_unset=True,
     )
 
+    previous_values = {
+        field_name: getattr(
+            alternative,
+            field_name,
+        )
+        for field_name in update_fields
+    }
+
     updated_alternative = decision_alternative_repository.update_decision_alternative(
         session,
         alternative=alternative,
         **update_fields,
+    )
+
+    new_values = {
+        field_name: getattr(
+            updated_alternative,
+            field_name,
+        )
+        for field_name in update_fields
+    }
+
+    decision_audit_service.record_decision_alternative_updated(
+        session,
+        alternative=updated_alternative,
+        previous_values=previous_values,
+        new_values=new_values,
     )
 
     session.commit()
@@ -313,9 +351,31 @@ def delete_decision_alternative(
             detail="Decision alternative not found",
         )
 
+    removed_alternative_id = alternative.id
+    removed_title = alternative.title
+    removed_description = alternative.description
+    removed_position = alternative.position
+
     decision_alternative_repository.delete_decision_alternative(
         session,
         alternative=alternative,
+    )
+
+    remaining_alternatives = decision_alternative_repository.list_decision_alternatives(
+        session,
+        decision_id=decision.id,
+    )
+
+    decision_audit_service.record_decision_alternative_removed(
+        session,
+        decision_id=decision.id,
+        alternative_id=removed_alternative_id,
+        title=removed_title,
+        description=removed_description,
+        position=removed_position,
+        remaining_alternative_order=[
+            remaining_alternative.id for remaining_alternative in remaining_alternatives
+        ],
     )
 
     session.commit()
@@ -419,6 +479,11 @@ def create_decision_evidence(
         for citation in citations
         if citation.decision_evidence_id == created_evidence.id
     )
+    decision_audit_service.record_decision_evidence_added(
+        session,
+        decision_id=decision.id,
+        citation=created_citation,
+    )
 
     session.commit()
 
@@ -516,9 +581,25 @@ def delete_decision_evidence(
             detail="Decision evidence not found",
         )
 
+    citations = decision_evidence_repository.list_decision_evidence(
+        session,
+        decision_alternative_id=alternative.id,
+    )
+    removed_citation = next(
+        citation
+        for citation in citations
+        if citation.decision_evidence_id == evidence.id
+    )
+
     decision_evidence_repository.delete_decision_evidence(
         session,
         evidence=evidence,
+    )
+
+    decision_audit_service.record_decision_evidence_removed(
+        session,
+        decision_id=decision.id,
+        citation=removed_citation,
     )
 
     session.commit()
@@ -642,3 +723,44 @@ def cancel_decision(
     session.commit()
 
     return cancelled_decision
+
+
+@router.get(
+    "/{decision_id}/history",
+    response_model=DecisionAuditHistoryResponse,
+)
+def get_decision_audit_history(
+    decision_id: UUID,
+    session: SessionDependency,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> DecisionAuditHistoryResponse:
+    decision = decision_repository.get_decision_by_id(
+        session,
+        decision_id,
+    )
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    events = decision_audit_repository.list_decision_audit_events(
+        session,
+        decision_id=decision.id,
+        offset=offset,
+        limit=limit,
+    )
+    total = decision_audit_repository.count_decision_audit_events(
+        session,
+        decision_id=decision.id,
+    )
+
+    return DecisionAuditHistoryResponse(
+        decision_id=decision.id,
+        items=events,
+        total=total,
+        offset=offset,
+        limit=limit,
+    )
