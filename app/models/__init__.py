@@ -9,6 +9,7 @@ from app.models.document_page import DocumentPage
 from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
 from app.models.user import User
+from app.models.user_password_credential import UserPasswordCredential
 
 __all__ = [
     "Base",
@@ -22,4 +23,5 @@ __all__ = [
     "DocumentVersion",
     "DocumentProcessingJob",
     "User",
+    "UserPasswordCredential",
 ]
