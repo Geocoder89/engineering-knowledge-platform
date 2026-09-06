@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +26,17 @@ class Settings(BaseSettings):
         default="text-embedding-3-small",
         min_length=1,
     )
+
+    session_cookie_name: str = Field(
+        default="decision_session",
+        min_length=1,
+    )
+    session_cookie_secure: bool = True
+    session_cookie_samesite: Literal[
+        "lax",
+        "strict",
+        "none",
+    ] = "lax"
 
 
 settings = Settings()
