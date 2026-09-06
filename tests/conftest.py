@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Connection
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import engine, get_session
 from app.main import app
 from app.storage.dependencies import get_document_storage
@@ -46,8 +47,16 @@ def document_storage_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def client(
-    document_storage_path: Path, database_connection: Connection
+    document_storage_path: Path,
+    database_connection: Connection,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
+    monkeypatch.setattr(
+        settings,
+        "session_cookie_secure",
+        True,
+    )
+
     def override_get_document_storage() -> LocalDocumentStorage:
         return LocalDocumentStorage(
             root_path=document_storage_path,
@@ -64,11 +73,18 @@ def client(
 
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_document_storage] = override_get_document_storage
+
     try:
-        with TestClient(app) as test_client:
+        with TestClient(
+            app,
+            base_url="https://testserver",
+        ) as test_client:
             yield test_client
     finally:
-        app.dependency_overrides.pop(get_session, None)
+        app.dependency_overrides.pop(
+            get_session,
+            None,
+        )
         app.dependency_overrides.pop(
             get_document_storage,
             None,
