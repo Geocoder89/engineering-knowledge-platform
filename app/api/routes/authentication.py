@@ -11,13 +11,44 @@ from app.models.user import User
 from app.schemas.authentication import (
     AuthenticatedUserResponse,
     LoginRequest,
+    RegistrationRequest,
 )
 from app.services import authentication as authentication_service
+from app.services import user_registration as user_registration_service
 
 router = APIRouter(
     prefix="/auth",
     tags=["authentication"],
 )
+
+
+@router.post(
+    "/register",
+    response_model=AuthenticatedUserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register(
+    registration: RegistrationRequest,
+    session: SessionDependency,
+) -> User:
+    try:
+        user = user_registration_service.register_user(
+            session,
+            email=registration.email,
+            display_name=registration.display_name,
+            password=registration.password,
+        )
+    except user_registration_service.UserAlreadyExistsError as error:
+        session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+
+    session.commit()
+
+    return user
 
 
 @router.post(
