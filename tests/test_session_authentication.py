@@ -257,6 +257,7 @@ def test_service_authenticates_active_user_and_creates_session(
     user = User(
         email="engineer@example.com",
         display_name="Engineering Reviewer",
+        email_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(user)
     db_session.flush()
@@ -396,6 +397,7 @@ def test_service_resolves_authenticated_user_from_session_token(
     user = User(
         email="engineer@example.com",
         display_name="Engineering Reviewer",
+        email_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(user)
     db_session.flush()
@@ -444,6 +446,7 @@ def test_service_rejects_invalid_authenticated_session(
         user = User(
             email="engineer@example.com",
             display_name="Engineering Reviewer",
+            email_verified_at=datetime.now(timezone.utc),
         )
         db_session.add(user)
         db_session.flush()
@@ -501,6 +504,7 @@ def test_service_revokes_authenticated_session(
     user = User(
         email="engineer@example.com",
         display_name="Engineering Reviewer",
+        email_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(user)
     db_session.flush()
@@ -562,6 +566,7 @@ def test_logs_in_user_and_sets_secure_session_cookie(
     user = User(
         email="engineer@example.com",
         display_name="Engineering Reviewer",
+        email_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(user)
     db_session.flush()
@@ -623,6 +628,7 @@ def test_gets_current_authenticated_user(
     user = User(
         email="engineer@example.com",
         display_name="Engineering Reviewer",
+        email_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(user)
     db_session.flush()
@@ -670,6 +676,7 @@ def test_logs_out_user_revokes_session_and_clears_cookie(
     user = User(
         email="engineer@example.com",
         display_name="Engineering Reviewer",
+        email_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(user)
     db_session.flush()

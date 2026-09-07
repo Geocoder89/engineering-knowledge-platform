@@ -59,7 +59,39 @@ def consume_email_verification_token(
     verification_token: UserEmailVerificationToken,
     consumed_at: datetime,
 ) -> UserEmailVerificationToken:
-    verification_token.consumed_at = consumed_at
+    verification_token.consumed_at = max(consumed_at, verification_token.created_at)
     session.flush()
 
     return verification_token
+
+
+def consume_active_email_verification_tokens_for_user(
+    session: Session,
+    *,
+    user_id: UUID,
+    consumed_at: datetime,
+) -> list[UserEmailVerificationToken]:
+    statement = (
+        select(
+            UserEmailVerificationToken,
+        )
+        .where(
+            UserEmailVerificationToken.user_id == user_id,
+            UserEmailVerificationToken.consumed_at.is_(None),
+            UserEmailVerificationToken.expires_at > consumed_at,
+        )
+        .with_for_update()
+    )
+
+    verification_tokens = list(
+        session.scalars(
+            statement,
+        ),
+    )
+
+    for verification_token in verification_tokens:
+        verification_token.consumed_at = max(consumed_at, verification_token.created_at)
+
+    session.flush()
+
+    return verification_tokens

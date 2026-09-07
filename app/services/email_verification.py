@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.user import InvalidUserEmail
 from app.models.user import User
 from app.models.user_email_verification_token import (
     UserEmailVerificationToken,
@@ -83,6 +86,8 @@ def verify_email(
     if token_record is None:
         raise InvalidEmailVerificationTokenError()
 
+    verified_at = max(verified_at, token_record.created_at)
+
     user = user_repository.get_user_by_id(
         session,
         token_record.user_id,
@@ -104,3 +109,67 @@ def verify_email(
         )
 
     return user
+
+
+def consume_active_email_verification_tokens_for_user(
+    session: Session,
+    *,
+    user_id: UUID,
+    consumed_at: datetime,
+) -> list[UserEmailVerificationToken]:
+    statement = (
+        select(
+            UserEmailVerificationToken,
+        )
+        .where(
+            UserEmailVerificationToken.user_id == user_id,
+            UserEmailVerificationToken.consumed_at.is_(None),
+            UserEmailVerificationToken.expires_at > consumed_at,
+        )
+        .with_for_update()
+    )
+
+    verification_tokens = list(
+        session.scalars(
+            statement,
+        ),
+    )
+
+    for verification_token in verification_tokens:
+        verification_token.consumed_at = consumed_at
+
+    session.flush()
+
+    return verification_tokens
+
+
+def request_email_verification(
+    session: Session,
+    *,
+    email: str,
+) -> EmailVerificationIssue | None:
+    try:
+        user = user_repository.get_user_by_email(
+            session,
+            email=email,
+        )
+    except InvalidUserEmail:
+        return None
+
+    if user is None or user.email_verified_at is not None:
+        return None
+
+    requested_at = utc_now()
+
+    with session.begin_nested():
+        email_verification_token_repository.consume_active_email_verification_tokens_for_user(
+            session,
+            user_id=user.id,
+            consumed_at=requested_at,
+        )
+        verification = issue_email_verification(
+            session,
+            user=user,
+        )
+
+    return verification

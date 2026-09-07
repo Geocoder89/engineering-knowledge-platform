@@ -19,12 +19,14 @@ def test_service_registers_user_with_password_credential(
 ) -> None:
     password = "correct horse battery staple"
 
-    registered_user = user_registration_service.register_user(
+    registration = user_registration_service.register_user(
         db_session,
         email="  Engineer@Example.COM  ",
         display_name="  Engineering Reviewer  ",
         password=password,
     )
+
+    registered_user = registration.user
 
     assert registered_user.email == "engineer@example.com"
     assert registered_user.display_name == "Engineering Reviewer"
@@ -57,12 +59,13 @@ def test_service_rejects_duplicate_email_without_changing_existing_password(
     original_password = "correct horse battery staple"
     replacement_password = "a completely different password"
 
-    existing_user = user_registration_service.register_user(
+    existing_registration = user_registration_service.register_user(
         db_session,
         email="engineer@example.com",
         display_name="Engineering Reviewer",
         password=original_password,
     )
+    existing_user = existing_registration.user
 
     with pytest.raises(
         user_registration_service.UserAlreadyExistsError,
@@ -262,12 +265,14 @@ def test_service_handles_duplicate_email_created_during_registration(
     original_password = "correct horse battery staple"
     replacement_password = "a completely different password"
 
-    existing_user = user_registration_service.register_user(
+    existing_registration = user_registration_service.register_user(
         db_session,
         email="engineer@example.com",
         display_name="Engineering Reviewer",
         password=original_password,
     )
+
+    existing_user = existing_registration.user
 
     monkeypatch.setattr(
         user_registration_service.user_repository,
@@ -351,7 +356,7 @@ def test_service_rolls_back_user_when_password_credential_creation_fails(
     assert credential_count == 0
 
 
-def test_registered_user_can_log_in_and_access_current_user(
+def test_registered_user_cannot_log_in_before_email_verification(
     client: TestClient,
 ) -> None:
     password = "correct horse battery staple"
@@ -376,13 +381,8 @@ def test_registered_user_can_log_in_and_access_current_user(
         },
     )
 
-    assert login_response.status_code == 200
-    assert login_response.json() == registration_response.json()
-    assert client.cookies.get("decision_session") is not None
-
-    current_user_response = client.get(
-        "/users/me",
-    )
-
-    assert current_user_response.status_code == 200
-    assert current_user_response.json() == registration_response.json()
+    assert login_response.status_code == 401
+    assert login_response.json() == {
+        "detail": "Invalid email or password",
+    }
+    assert client.cookies.get("decision_session") is None
