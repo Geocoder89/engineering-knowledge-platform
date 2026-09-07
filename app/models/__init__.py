@@ -9,6 +9,7 @@ from app.models.document_page import DocumentPage
 from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
 from app.models.user import User
+from app.models.user_email_verification_token import UserEmailVerificationToken
 from app.models.user_password_credential import UserPasswordCredential
 from app.models.user_session import UserSession
 
@@ -24,6 +25,7 @@ __all__ = [
     "DocumentVersion",
     "DocumentProcessingJob",
     "User",
+    "UserEmailVerificationToken",
     "UserPasswordCredential",
     "UserSession",
 ]
