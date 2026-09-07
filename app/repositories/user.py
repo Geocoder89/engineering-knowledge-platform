@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -59,6 +60,18 @@ def set_user_status(
     status: UserStatus,
 ) -> User:
     user.status = status.value
+    session.flush()
+
+    return user
+
+
+def set_user_email_verified_at(
+    session: Session,
+    *,
+    user: User,
+    verified_at: datetime,
+) -> User:
+    user.email_verified_at = verified_at
     session.flush()
 
     return user

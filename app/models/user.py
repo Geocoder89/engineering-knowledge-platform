@@ -70,3 +70,7 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.clock_timestamp(),
     )
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
