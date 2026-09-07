@@ -99,6 +99,7 @@ def authenticate_user(
         user is None
         or credential is None
         or user.status != UserStatus.ACTIVE.value
+        or user.email_verified_at is None
         or not password_is_valid
     ):
         raise InvalidCredentialsError()
@@ -144,7 +145,11 @@ def resolve_authenticated_user(
         user_session.user_id,
     )
 
-    if user is None or user.status != UserStatus.ACTIVE.value:
+    if (
+        user is None
+        or user.status != UserStatus.ACTIVE.value
+        or user.email_verified_at is None
+    ):
         raise InvalidSessionError()
 
     return AuthenticatedUser(

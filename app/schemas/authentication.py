@@ -6,6 +6,38 @@ from app.domain.password import validate_password
 from app.domain.user import normalize_user_email
 
 
+class EmailVerificationRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    verification_token: str = Field(
+        min_length=1,
+        max_length=256,
+    )
+
+
+class EmailVerificationResendRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    email: str = Field(
+        min_length=1,
+        max_length=320,
+    )
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(
+        cls,
+        email: str,
+    ) -> str:
+        return normalize_user_email(
+            email,
+        )
+
+
 class RegistrationRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
