@@ -1,5 +1,7 @@
+from collections.abc import Iterator
 from typing import Annotated, TypeAlias
 
+import httpx
 from fastapi import (
     Cookie,
     Depends,
@@ -39,8 +41,17 @@ SessionTokenCookie: TypeAlias = Annotated[
 ]
 
 
-def provide_email_verification_sender() -> EmailVerificationSender:
-    return get_email_verification_sender()
+def provide_email_verification_sender() -> Iterator[EmailVerificationSender]:
+    if settings.resend_api_key is None:
+        yield get_email_verification_sender()
+        return
+
+    with httpx.Client(
+        timeout=settings.email_delivery_timeout_seconds,
+    ) as http_client:
+        yield get_email_verification_sender(
+            http_client=http_client,
+        )
 
 
 EmailVerificationSenderDependency: TypeAlias = Annotated[

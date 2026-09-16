@@ -163,21 +163,26 @@ def revoke_authenticated_session(
     *,
     session_token: str,
 ) -> UserSession | None:
-    revoked_at = utc_now()
+    requested_revoked_at = utc_now()
     token_hash = hash_session_token(
         session_token,
     )
     user_session = user_session_repository.get_active_user_session_by_token_hash(
         session,
         token_hash=token_hash,
-        current_time=revoked_at,
+        current_time=requested_revoked_at,
     )
 
     if user_session is None:
         return None
 
+    effective_revoked_at = max(
+        requested_revoked_at,
+        user_session.created_at,
+    )
+
     return user_session_repository.revoke_user_session(
         session,
         user_session=user_session,
-        revoked_at=revoked_at,
+        revoked_at=effective_revoked_at,
     )

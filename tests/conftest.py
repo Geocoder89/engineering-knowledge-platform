@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Connection
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import provide_email_verification_sender
+from app.api import dependencies as api_dependencies
 from app.config import settings
 from app.database import engine, get_session
 from app.main import app
@@ -113,7 +113,7 @@ def client(
 
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_document_storage] = override_get_document_storage
-    app.dependency_overrides[provide_email_verification_sender] = (
+    app.dependency_overrides[api_dependencies.provide_email_verification_sender] = (
         override_email_verification_sender
     )
     try:
@@ -132,4 +132,6 @@ def client(
             None,
         )
 
-        app.dependency_overrides.pop(provide_email_verification_sender, None)
+        app.dependency_overrides.pop(
+            api_dependencies.provide_email_verification_sender, None
+        )

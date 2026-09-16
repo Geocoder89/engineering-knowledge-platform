@@ -4,7 +4,7 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 9 backend milestone complete. Authentication, authorization, deployment, and additional production-readiness work are planned next.
+> Current status: Stage 10 identity, authentication, and email-verification backend implemented. Frontend integration and additional production hardening remain planned.
 
 ## Why This Project Exists
 
@@ -136,6 +136,7 @@ The application is separated into the following layers:
 | `app/chunking` | Text segmentation |
 | `app/embeddings` | Embedding-provider abstraction |
 | `app/storage` | Document-storage abstraction |
+| `app/notifications` | Transactional-email abstractions and provider integrations |
 
 ## Technology Stack
 
@@ -188,6 +189,27 @@ cp .env.example .env
 ```
 
 Update the development password and add an OpenAI API key when exercising document embeddings or search.
+
+### Email-verification delivery
+
+Email delivery is disabled unless all three Resend settings are configured:
+
+```text
+RESEND_API_KEY
+EMAIL_SENDER_IDENTITY
+EMAIL_VERIFICATION_URL
+```
+
+`EMAIL_VERIFICATION_URL` is the application page opened from the verification
+email. It is not the backend `/auth/verify-email` endpoint. The raw verification
+token is added as a `token` query parameter.
+
+`EMAIL_DELIVERY_TIMEOUT_SECONDS` controls the outbound Resend request timeout
+and defaults to 10 seconds.
+
+Registration and resend requests return `503 Service Unavailable` when delivery
+is unconfigured or the provider cannot accept the message. Provider credentials
+and raw verification tokens must never be committed or logged.
 
 Do not commit `.env`. It is excluded through `.gitignore`.
 
@@ -256,6 +278,11 @@ The API and worker use the same PostgreSQL database and document-storage configu
 | Cancel decision | `/decisions/{decision_id}/cancel` |
 | Assembled record | `/decisions/{decision_id}/record` |
 | Audit history | `/decisions/{decision_id}/history` |
+| Registration | `/auth/register` |
+| Login and logout | `/auth/login`, `/auth/logout` |
+| Verify email | `/auth/verify-email` |
+| Resend verification | `/auth/resend-verification` |
+| Current user | `/users/me` |
 
 The generated OpenAPI documentation provides the complete methods, payloads, validation constraints, and response schemas.
 
@@ -267,7 +294,7 @@ Run the complete test suite:
 python -m pytest -q
 ```
 
-At the Stage 9 milestone, the project contains 232 passing tests covering:
+The project test suite covers:
 
 - Pydantic and API validation
 - Database constraints
@@ -281,6 +308,8 @@ At the Stage 9 milestone, the project contains 232 passing tests covering:
 - Assembled-record composition
 - API failure and boundary conditions
 - Fixed-query evidence loading
+- Registration, authentication, and email-verification workflows
+- Transactional-email delivery and provider-failure handling
 
 Run lint and formatting verification:
 
