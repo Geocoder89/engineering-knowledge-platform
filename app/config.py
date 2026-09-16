@@ -1,7 +1,7 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, SecretStr
+from pydantic import Field, HttpUrl, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     )
     model_config = SettingsConfigDict(
         env_file=".env",
+        env_ignore_empty=True,
         extra="ignore",
     )
 
@@ -37,6 +38,43 @@ class Settings(BaseSettings):
         "strict",
         "none",
     ] = "lax"
+
+    resend_api_key: SecretStr | None = Field(
+        default=None,
+        min_length=1,
+    )
+    email_sender_identity: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+    email_verification_url: HttpUrl | None = None
+    email_delivery_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+    )
+
+    @model_validator(
+        mode="after",
+    )
+    def validate_resend_email_delivery_configuration(
+        self,
+    ) -> Self:
+        configuration_values = (
+            self.resend_api_key,
+            self.email_sender_identity,
+            self.email_verification_url,
+        )
+        configured_values = sum(value is not None for value in configuration_values)
+
+        if configured_values not in {
+            0,
+            len(configuration_values),
+        }:
+            raise ValueError(
+                "Resend email delivery configuration must be complete",
+            )
+
+        return self
 
 
 settings = Settings()
