@@ -5,12 +5,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.api import dependencies as api_dependencies
 from app.config import settings
 from app.database import engine, get_session
 from app.main import app
+from app.services.rate_limiting import DatabaseRateLimiter
 from app.storage.dependencies import get_document_storage
 from app.storage.local import LocalDocumentStorage
 
@@ -94,6 +95,19 @@ def client(
         True,
     )
 
+    rate_limit_session_factory = sessionmaker(
+        bind=database_connection,
+        autoflush=False,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+    rate_limiter = DatabaseRateLimiter(
+        session_factory=rate_limit_session_factory,
+    )
+
+    def override_rate_limiter() -> DatabaseRateLimiter:
+        return rate_limiter
+
     def override_email_verification_sender() -> FakeEmailVerificationSender:
         return email_verification_sender
 
@@ -116,6 +130,9 @@ def client(
     app.dependency_overrides[api_dependencies.provide_email_verification_sender] = (
         override_email_verification_sender
     )
+    app.dependency_overrides[api_dependencies.provide_rate_limiter] = (
+        override_rate_limiter
+    )
     try:
         with TestClient(
             app,
@@ -134,4 +151,8 @@ def client(
 
         app.dependency_overrides.pop(
             api_dependencies.provide_email_verification_sender, None
+        )
+        app.dependency_overrides.pop(
+            api_dependencies.provide_rate_limiter,
+            None,
         )
