@@ -226,6 +226,33 @@ and raw verification tokens must never be committed or logged.
 
 Do not commit `.env`. It is excluded through `.gitignore`.
 
+### Authentication rate limiting
+
+Sensitive unauthenticated authentication operations use PostgreSQL-backed
+fixed-window rate limits.
+
+| Endpoint | Key | Allowance |
+| --- | --- | --- |
+| `/auth/login` | Normalized email | 5 requests per 15 minutes |
+| `/auth/login` | Client IP | 20 requests per 15 minutes |
+| `/auth/register` | Normalized email | 3 requests per hour |
+| `/auth/register` | Client IP | 5 requests per hour |
+| `/auth/resend-verification` | Normalized email | 3 requests per hour |
+| `/auth/resend-verification` | Client IP | 10 requests per hour |
+| `/auth/verify-email` | Client IP | 20 requests per 15 minutes |
+
+Rejected requests return `429 Too Many Requests` with a `Retry-After` header.
+Only scoped SHA-256 hashes of email addresses and client IP addresses are
+persisted; raw identifiers are not stored in rate-limit buckets.
+
+Client IP limits currently use the direct connection address and do not trust
+forwarded-client headers. Trusted-proxy handling must be configured as part of
+deployment before relying on forwarded addresses.
+
+Logout is intentionally not rate limited because it is inexpensive and limiting
+it could prevent a user from ending a session. Expired bucket cleanup and
+additional edge-level traffic controls remain deployment hardening tasks.
+
 ### 4. Start PostgreSQL
 
 ```bash

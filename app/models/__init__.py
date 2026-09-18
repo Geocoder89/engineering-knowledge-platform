@@ -8,6 +8,7 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_processing_job import DocumentProcessingJob
 from app.models.document_version import DocumentVersion
+from app.models.rate_limit_bucket import RateLimitBucket
 from app.models.user import User
 from app.models.user_email_verification_token import UserEmailVerificationToken
 from app.models.user_password_credential import UserPasswordCredential
@@ -24,6 +25,7 @@ __all__ = [
     "DocumentPage",
     "DocumentVersion",
     "DocumentProcessingJob",
+    "RateLimitBucket",
     "User",
     "UserEmailVerificationToken",
     "UserPasswordCredential",

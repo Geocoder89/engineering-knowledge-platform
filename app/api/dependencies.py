@@ -11,12 +11,13 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_session
+from app.database import SessionLocal, get_session
 from app.embeddings.base import EmbeddingProvider
 from app.embeddings.dependencies import get_embedding_provider
 from app.notifications.base import EmailVerificationSender
 from app.notifications.dependencies import get_email_verification_sender
 from app.services import authentication as authentication_service
+from app.services.rate_limiting import DatabaseRateLimiter, RateLimiter
 
 
 def provide_embedding_provider() -> EmbeddingProvider:
@@ -38,6 +39,20 @@ SessionTokenCookie: TypeAlias = Annotated[
     Cookie(
         alias=settings.session_cookie_name,
     ),
+]
+
+rate_limiter = DatabaseRateLimiter(
+    session_factory=SessionLocal,
+)
+
+
+def provide_rate_limiter() -> RateLimiter:
+    return rate_limiter
+
+
+RateLimiterDependency: TypeAlias = Annotated[
+    RateLimiter,
+    Depends(provide_rate_limiter),
 ]
 
 
