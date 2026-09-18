@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-bookworm
+        env:
+          POSTGRES_USER: decision_user
+          POSTGRES_PASSWORD: decision_password
+          POSTGRES_DB: decision_workflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U decision_user -d decision_workflow"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://decision_user:decision_password@localhost:5432/decision_workflow
+      POSTGRES_USER: decision_user
+      POSTGRES_PASSWORD: decision_password
+      POSTGRES_DB: decision_workflow
+      POSTGRES_PORT: 5432
+      DOCUMENT_STORAGE_PATH: var/document-storage
+      DOCUMENT_MAX_UPLOAD_SIZE_BYTES: 10485760
+      DOCUMENT_PROCESSING_POLL_INTERVAL_SECONDS: 1.0
+      OPENAI_API_KEY: ""
+      OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+      SESSION_COOKIE_NAME: decision_session
+      SESSION_COOKIE_SECURE: "false"
+      SESSION_COOKIE_SAMESITE: lax
+      EMAIL_DELIVERY_TIMEOUT_SECONDS: 10.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Verify installed dependencies
+        run: python -m pip check
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Apply database migrations
+        run: alembic upgrade head
+
+      - name: Verify migration state
+        run: |
+          alembic current
+          alembic check
+
+      - name: Run tests
+        run: python -m pytest -q
