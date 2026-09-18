@@ -347,7 +347,7 @@ tests/               Unit, integration, API, and worker tests
 
 ## Roadmap
 
-### Stage 10: Identity and security
+### Completed: Stage 10 identity and security
 
 - Persisted user identity
 - Secure password storage
@@ -356,6 +356,8 @@ tests/               Unit, integration, API, and worker tests
 - Authorization and ownership rules
 - Creator and reviewer attribution
 - Actor identity in audit events
+- Email verification and resend-verification workflows
+- Transactional-email delivery abstraction and provider-failure handling
 
 ### Production readiness
 
@@ -383,8 +385,7 @@ This repository is under active development and is not yet presented as a produc
 
 Current limitations include:
 
-- No user authentication or authorization
-- No creator or reviewer identity
+- Authentication and authorization are implemented in the backend, but frontend integration is still pending
 - Local filesystem document storage
 - No hosted deployment configuration
 - No CI pipeline
