@@ -4,7 +4,7 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 identity, authentication, and email-verification backend implemented. Frontend integration and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, logout, current-user lookup, and email verification are implemented. Resource-level authorization/ownership, identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
 
 ## Why This Project Exists
 
@@ -59,6 +59,19 @@ This platform creates a structured decision record that connects each outcome to
 - Database constraints for statuses, evidence types, ordering, and uniqueness
 - Row-level locking for concurrency-sensitive decision changes
 - Chronological, paginated decision history
+
+### Identity and authentication
+
+- Persisted user identities with normalized, unique email addresses
+- Password-based registration with separately stored password credentials
+- Email-verification tokens and verification workflow
+- Transactional verification-email delivery through a notification-provider abstraction
+- Login restricted to active, email-verified users
+- Random session tokens delivered through configurable HttpOnly cookies
+- Session tokens hashed before persistence rather than stored in raw form
+- Server-side session expiry and logout revocation
+- Authenticated current-user lookup through `GET /users/me`
+- Generic resend-verification responses to avoid exposing whether an account exists
 
 ## Decision Lifecycle
 
@@ -347,15 +360,23 @@ tests/               Unit, integration, API, and worker tests
 
 ## Roadmap
 
-### Stage 10: Identity and security
+### Stage 10: Identity and authentication — implemented
 
 - Persisted user identity
 - Secure password storage
-- Access-token authentication
-- Refresh-token rotation and revocation
-- Authorization and ownership rules
+- Registration and email verification
+- Password-based login for active, verified users
+- Server-side session authentication using HttpOnly cookies
+- Hashed session-token persistence
+- Session expiry and logout revocation
+- Authenticated current-user endpoint
+
+### Next identity and security work
+
+- Resource-level authorization and ownership rules for documents and decisions
 - Creator and reviewer attribution
-- Actor identity in audit events
+- Actor identity in decision audit events
+- Additional abuse protection and authentication hardening
 
 ### Production readiness
 
@@ -383,8 +404,8 @@ This repository is under active development and is not yet presented as a produc
 
 Current limitations include:
 
-- No user authentication or authorization
-- No creator or reviewer identity
+- Authentication is implemented, but resource-level authorization and ownership rules are not yet enforced across document and decision workflows
+- Creator/reviewer attribution and authenticated actor identity are not yet wired into decision records and audit events
 - Local filesystem document storage
 - No hosted deployment configuration
 - No CI pipeline
