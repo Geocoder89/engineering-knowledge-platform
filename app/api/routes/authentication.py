@@ -26,6 +26,7 @@ from app.schemas.authentication import (
     LoginRequest,
     RegistrationRequest,
 )
+from app.security.csrf import generate_csrf_token
 from app.services import authentication as authentication_service
 from app.services import email_verification as email_verification_service
 from app.services import user_registration as user_registration_service
@@ -217,6 +218,18 @@ def login(
         path="/",
     )
 
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=generate_csrf_token(),
+        max_age=int(
+            authentication_service.SESSION_DURATION.total_seconds(),
+        ),
+        httponly=False,
+        secure=settings.session_cookie_secure,
+        samesite=settings.session_cookie_samesite,
+        path="/",
+    )
+
     return authentication.user
 
 
@@ -242,6 +255,14 @@ def logout(
         path="/",
         secure=settings.session_cookie_secure,
         httponly=True,
+        samesite=settings.session_cookie_samesite,
+    )
+
+    response.delete_cookie(
+        key=settings.csrf_cookie_name,
+        path="/",
+        secure=settings.session_cookie_secure,
+        httponly=False,
         samesite=settings.session_cookie_samesite,
     )
 

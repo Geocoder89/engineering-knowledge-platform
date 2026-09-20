@@ -4,7 +4,7 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, logout, current-user lookup, and email verification are implemented. Resource-level authorization/ownership, identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, and CSRF/Origin protection are implemented. Resource-level authorization/ownership, identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
 
 ## Why This Project Exists
 
@@ -202,6 +202,38 @@ cp .env.example .env
 ```
 
 Update the development password and add an OpenAI API key when exercising document embeddings or search.
+
+### CSRF and Origin protection
+
+Unsafe browser requests using `POST`, `PUT`, `PATCH`, or `DELETE` must include
+an exact trusted `Origin`. Configure trusted origins as a JSON array:
+
+```env
+CSRF_TRUSTED_ORIGINS='["http://localhost:3000"]'
+CSRF_COOKIE_NAME=decision_csrf
+```
+
+Trusted origins contain only the scheme, hostname, and optional port. Do not
+include paths, query strings, credentials, or trailing slashes.
+
+Successful login issues two host-only cookies:
+
+- `decision_session` is the `HttpOnly` authentication credential.
+- `decision_csrf` is readable by the frontend and contains a separate 256-bit
+  CSRF token.
+
+For authenticated unsafe requests, the frontend must copy the
+`decision_csrf` cookie value into the `X-CSRF-Token` request header. The cookie
+and header must match.
+
+Safe requests such as `GET`, `HEAD`, and `OPTIONS` do not require a CSRF token.
+Registration, login, email verification, and verification resend require a
+trusted Origin but do not require the CSRF header because they are
+pre-authentication operations.
+
+Origin validation is separate from CORS. Until cross-origin browser access is
+configured explicitly, deploy the frontend and API behind the same origin or a
+same-origin reverse proxy.
 
 ### Email-verification delivery
 

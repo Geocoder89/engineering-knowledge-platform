@@ -610,6 +610,31 @@ def test_logs_in_user_and_sets_secure_session_cookie(
 
     assert session_token is not None
 
+    csrf_token = client.cookies.get(
+        "decision_csrf",
+    )
+
+    assert csrf_token is not None
+    assert csrf_token != session_token
+
+    csrf_cookie_header = next(
+        (
+            cookie_header
+            for cookie_header in response.headers.get_list(
+                "set-cookie",
+            )
+            if cookie_header.startswith("decision_csrf=")
+        ),
+        None,
+    )
+
+    assert csrf_cookie_header is not None
+    assert "HttpOnly" not in csrf_cookie_header
+    assert "Secure" in csrf_cookie_header
+    assert "SameSite=lax" in csrf_cookie_header
+    assert "Path=/" in csrf_cookie_header
+    assert "Max-Age=43200" in csrf_cookie_header
+
     stored_session = user_session_repository.get_active_user_session_by_token_hash(
         db_session,
         token_hash=hash_session_token(session_token),
@@ -714,10 +739,43 @@ def test_logs_out_user_revokes_session_and_clears_cookie(
 
     stored_session_id = stored_session.id
 
-    response = client.post(
-        "/auth/logout",
+    csrf_token = client.cookies.get(
+        "decision_csrf",
     )
 
+    assert csrf_token is not None
+
+    for submitted_csrf_token in (
+        None,
+        "mismatched-csrf-token",
+    ):
+        headers = {}
+
+        if submitted_csrf_token is not None:
+            headers["X-CSRF-Token"] = submitted_csrf_token
+
+        rejected_response = client.post(
+            "/auth/logout",
+            headers=headers,
+        )
+
+        assert rejected_response.status_code == 403
+        assert rejected_response.json() == {
+            "detail": "CSRF token is invalid",
+        }
+        assert (
+            client.cookies.get(
+                "decision_session",
+            )
+            == session_token
+        )
+
+    response = client.post(
+        "/auth/logout",
+        headers={
+            "X-CSRF-Token": csrf_token,
+        },
+    )
     assert response.status_code == 204
     assert (
         client.cookies.get(
@@ -725,15 +783,42 @@ def test_logs_out_user_revokes_session_and_clears_cookie(
         )
         is None
     )
+    assert (
+        client.cookies.get(
+            "decision_csrf",
+        )
+        is None
+    )
 
-    set_cookie = response.headers["set-cookie"]
+    set_cookie_headers = response.headers.get_list(
+        "set-cookie",
+    )
+    session_cookie_header = next(
+        cookie_header
+        for cookie_header in set_cookie_headers
+        if cookie_header.startswith("decision_session=")
+    )
+    csrf_cookie_header = next(
+        (
+            cookie_header
+            for cookie_header in set_cookie_headers
+            if cookie_header.startswith("decision_csrf=")
+        ),
+        None,
+    )
 
-    assert "decision_session=" in set_cookie
-    assert "Max-Age=0" in set_cookie
-    assert "HttpOnly" in set_cookie
-    assert "Secure" in set_cookie
-    assert "SameSite=lax" in set_cookie
-    assert "Path=/" in set_cookie
+    assert "Max-Age=0" in session_cookie_header
+    assert "HttpOnly" in session_cookie_header
+    assert "Secure" in session_cookie_header
+    assert "SameSite=lax" in session_cookie_header
+    assert "Path=/" in session_cookie_header
+
+    assert csrf_cookie_header is not None
+    assert "Max-Age=0" in csrf_cookie_header
+    assert "HttpOnly" not in csrf_cookie_header
+    assert "Secure" in csrf_cookie_header
+    assert "SameSite=lax" in csrf_cookie_header
+    assert "Path=/" in csrf_cookie_header
 
     db_session.expire_all()
 
@@ -817,6 +902,13 @@ def test_rejects_invalid_login_without_creating_session_cookie(
         is None
     )
 
+    assert (
+        client.cookies.get(
+            "decision_csrf",
+        )
+        is None
+    )
+
     session_count = db_session.scalar(
         select(
             func.count(),
@@ -856,6 +948,10 @@ def test_current_user_requires_valid_session_cookie(
 def test_logout_without_session_is_idempotent(
     client,
 ) -> None:
+    client.cookies.set(
+        "decision_csrf", "orphaned-csrf-token", domain="testserver.local", path="/"
+    )
+
     response = client.post(
         "/auth/logout",
     )
@@ -864,6 +960,13 @@ def test_logout_without_session_is_idempotent(
     assert (
         client.cookies.get(
             "decision_session",
+        )
+        is None
+    )
+
+    assert (
+        client.cookies.get(
+            "decision_csrf",
         )
         is None
     )
