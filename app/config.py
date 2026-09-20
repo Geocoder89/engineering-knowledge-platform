@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import Field, HttpUrl, SecretStr, model_validator
+from pydantic import Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +40,17 @@ class Settings(BaseSettings):
         "none",
     ] = "lax"
 
+    csrf_trusted_origins: frozenset[str] = frozenset(
+        {
+            "http://localhost:3000",
+        },
+    )
+
+    csrf_cookie_name: str = Field(
+        default="decision_csrf",
+        min_length=1,
+    )
+
     resend_api_key: SecretStr | None = Field(
         default=None,
         min_length=1,
@@ -52,6 +64,41 @@ class Settings(BaseSettings):
         default=10.0,
         gt=0,
     )
+
+    @field_validator(
+        "csrf_trusted_origins",
+    )
+    @classmethod
+    def validate_csrf_trusted_origins(
+        cls,
+        origins: frozenset[str],
+    ) -> frozenset[str]:
+        error_message = "CSRF trusted origins must contain valid HTTP origins"
+
+        if not origins:
+            raise ValueError(error_message)
+
+        for origin in origins:
+            try:
+                parsed_origin = urlsplit(origin)
+                hostname = parsed_origin.hostname
+                parsed_origin.port
+            except ValueError as error:
+                raise ValueError(error_message) from error
+
+            if (
+                origin != origin.strip()
+                or parsed_origin.scheme not in {"http", "https"}
+                or hostname is None
+                or parsed_origin.username is not None
+                or parsed_origin.password is not None
+                or parsed_origin.path
+                or parsed_origin.query
+                or parsed_origin.fragment
+            ):
+                raise ValueError(error_message)
+
+        return origins
 
     @model_validator(
         mode="after",

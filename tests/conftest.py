@@ -95,6 +95,16 @@ def client(
         True,
     )
 
+    monkeypatch.setattr(
+        settings,
+        "csrf_trusted_origins",
+        frozenset(
+            {
+                "https://testserver",
+            },
+        ),
+    )
+
     rate_limit_session_factory = sessionmaker(
         bind=database_connection,
         autoflush=False,
@@ -137,6 +147,9 @@ def client(
         with TestClient(
             app,
             base_url="https://testserver",
+            headers={
+                "Origin": "https://testserver",
+            },
         ) as test_client:
             yield test_client
     finally:
