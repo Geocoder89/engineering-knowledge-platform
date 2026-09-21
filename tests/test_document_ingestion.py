@@ -5,8 +5,8 @@ from uuid import UUID, uuid4
 from app.config import settings
 
 
-def test_uploads_first_document_version(client, document_storage_path):
-    create_response = client.post(
+def test_uploads_first_document_version(authenticated_client, document_storage_path):
+    create_response = authenticated_client.post(
         "/documents",
         json={"title": "Cooling system", "file_name": "cooling-design.pdf"},
     )
@@ -17,7 +17,7 @@ def test_uploads_first_document_version(client, document_storage_path):
 
     file_content = b"%PDF-1.7\nCooling system design"
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={"file": ("cooling-design.pdf", file_content, "application/pdf")},
     )
@@ -45,10 +45,10 @@ def test_uploads_first_document_version(client, document_storage_path):
 
 
 def test_returns_404_when_uploading_to_unknown_document(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    response = client.post(
+    response = authenticated_client.post(
         f"/documents/{uuid4()}/versions",
         files={
             "file": (
@@ -68,10 +68,10 @@ def test_returns_404_when_uploading_to_unknown_document(
 
 
 def test_rejects_empty_document_file(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -82,7 +82,7 @@ def test_rejects_empty_document_file(
 
     document = create_response.json()
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -102,10 +102,10 @@ def test_rejects_empty_document_file(
 
 
 def test_rejects_unsupported_document_file_type(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -116,7 +116,7 @@ def test_rejects_unsupported_document_file_type(
 
     document = create_response.json()
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -136,10 +136,10 @@ def test_rejects_unsupported_document_file_type(
 
 
 def test_rejects_invalid_pdf_content(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -150,7 +150,7 @@ def test_rejects_invalid_pdf_content(
 
     document = create_response.json()
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -170,10 +170,10 @@ def test_rejects_invalid_pdf_content(
 
 
 def test_uploads_subsequent_document_versions(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -194,7 +194,7 @@ def test_uploads_subsequent_document_versions(
         file_contents,
         start=1,
     ):
-        response = client.post(
+        response = authenticated_client.post(
             f"/documents/{document['id']}/versions",
             files={
                 "file": (
@@ -218,8 +218,8 @@ def test_uploads_subsequent_document_versions(
     assert {path.read_bytes() for path in stored_files} == set(file_contents)
 
 
-def test_lists_document_versions_with_pagination(client):
-    create_response = client.post(
+def test_lists_document_versions_with_pagination(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -231,7 +231,7 @@ def test_lists_document_versions_with_pagination(client):
     document = create_response.json()
 
     for version_number in range(1, 4):
-        upload_response = client.post(
+        upload_response = authenticated_client.post(
             f"/documents/{document['id']}/versions",
             files={
                 "file": (
@@ -244,7 +244,7 @@ def test_lists_document_versions_with_pagination(client):
 
         assert upload_response.status_code == 201
 
-    first_response = client.get(
+    first_response = authenticated_client.get(
         f"/documents/{document['id']}/versions?offset=0&limit=2"
     )
 
@@ -257,7 +257,7 @@ def test_lists_document_versions_with_pagination(client):
     assert first_page["limit"] == 2
     assert [version["version_number"] for version in first_page["items"]] == [3, 2]
 
-    second_response = client.get(
+    second_response = authenticated_client.get(
         f"/documents/{document['id']}/versions?offset=2&limit=2"
     )
 
@@ -271,8 +271,8 @@ def test_lists_document_versions_with_pagination(client):
     assert [version["version_number"] for version in second_page["items"]] == [1]
 
 
-def test_rejects_invalid_document_version_pagination(client):
-    create_response = client.post(
+def test_rejects_invalid_document_version_pagination(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -283,20 +283,22 @@ def test_rejects_invalid_document_version_pagination(client):
 
     document = create_response.json()
 
-    response = client.get(f"/documents/{document['id']}/versions?offset=-1&limit=0")
+    response = authenticated_client.get(
+        f"/documents/{document['id']}/versions?offset=-1&limit=0"
+    )
 
     assert response.status_code == 422
 
 
-def test_returns_404_when_listing_versions_for_unknown_document(client):
-    response = client.get(f"/documents/{uuid4()}/versions")
+def test_returns_404_when_listing_versions_for_unknown_document(authenticated_client):
+    response = authenticated_client.get(f"/documents/{uuid4()}/versions")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Document not found"}
 
 
-def test_retrieves_document_version_metadata(client):
-    create_response = client.post(
+def test_retrieves_document_version_metadata(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -307,7 +309,7 @@ def test_retrieves_document_version_metadata(client):
 
     document = create_response.json()
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -321,14 +323,14 @@ def test_retrieves_document_version_metadata(client):
 
     uploaded_version = upload_response.json()
 
-    response = client.get(f"/documents/{document['id']}/versions/1")
+    response = authenticated_client.get(f"/documents/{document['id']}/versions/1")
 
     assert response.status_code == 200
     assert response.json() == uploaded_version
 
 
-def test_returns_404_for_unknown_document_version(client):
-    create_response = client.post(
+def test_returns_404_for_unknown_document_version(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -339,21 +341,21 @@ def test_returns_404_for_unknown_document_version(client):
 
     document = create_response.json()
 
-    response = client.get(f"/documents/{document['id']}/versions/99")
+    response = authenticated_client.get(f"/documents/{document['id']}/versions/99")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Document version not found"}
 
 
-def test_returns_404_when_retrieving_version_for_unknown_document(client):
-    response = client.get(f"/documents/{uuid4()}/versions/1")
+def test_returns_404_when_retrieving_version_for_unknown_document(authenticated_client):
+    response = authenticated_client.get(f"/documents/{uuid4()}/versions/1")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Document not found"}
 
 
-def test_rejects_invalid_document_version_number(client):
-    create_response = client.post(
+def test_rejects_invalid_document_version_number(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -364,13 +366,13 @@ def test_rejects_invalid_document_version_number(client):
 
     document = create_response.json()
 
-    response = client.get(f"/documents/{document['id']}/versions/0")
+    response = authenticated_client.get(f"/documents/{document['id']}/versions/0")
 
     assert response.status_code == 422
 
 
-def test_downloads_document_version_content(client):
-    create_response = client.post(
+def test_downloads_document_version_content(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -382,7 +384,7 @@ def test_downloads_document_version_content(client):
     document = create_response.json()
     file_content = b"%PDF-1.7\nCooling system design"
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -394,7 +396,9 @@ def test_downloads_document_version_content(client):
     )
     assert upload_response.status_code == 201
 
-    response = client.get(f"/documents/{document['id']}/versions/1/content")
+    response = authenticated_client.get(
+        f"/documents/{document['id']}/versions/1/content"
+    )
 
     assert response.status_code == 200
     assert response.content == file_content
@@ -405,8 +409,8 @@ def test_downloads_document_version_content(client):
     assert response.headers["x-content-type-options"] == "nosniff"
 
 
-def test_returns_404_when_downloading_unknown_document_version(client):
-    create_response = client.post(
+def test_returns_404_when_downloading_unknown_document_version(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -417,24 +421,26 @@ def test_returns_404_when_downloading_unknown_document_version(client):
 
     document = create_response.json()
 
-    response = client.get(f"/documents/{document['id']}/versions/99/content")
+    response = authenticated_client.get(
+        f"/documents/{document['id']}/versions/99/content"
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Document version not found"}
 
 
-def test_returns_404_when_downloading_from_unknown_document(client):
-    response = client.get(f"/documents/{uuid4()}/versions/1/content")
+def test_returns_404_when_downloading_from_unknown_document(authenticated_client):
+    response = authenticated_client.get(f"/documents/{uuid4()}/versions/1/content")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Document not found"}
 
 
 def test_returns_404_when_document_version_content_is_missing(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -445,7 +451,7 @@ def test_returns_404_when_document_version_content_is_missing(
 
     document = create_response.json()
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -462,17 +468,19 @@ def test_returns_404_when_document_version_content_is_missing(
     )
     stored_file.unlink()
 
-    response = client.get(f"/documents/{document['id']}/versions/1/content")
+    response = authenticated_client.get(
+        f"/documents/{document['id']}/versions/1/content"
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Document content not found"}
 
 
 def test_rejects_corrupted_document_version_content(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -483,7 +491,7 @@ def test_rejects_corrupted_document_version_content(
 
     document = create_response.json()
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -500,17 +508,19 @@ def test_rejects_corrupted_document_version_content(
     )
     stored_file.write_bytes(b"corrupted content")
 
-    response = client.get(f"/documents/{document['id']}/versions/1/content")
+    response = authenticated_client.get(
+        f"/documents/{document['id']}/versions/1/content"
+    )
 
     assert response.status_code == 409
     assert response.json() == {"detail": "Document content failed integrity check"}
 
 
 def test_accepts_document_file_at_upload_limit(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -527,7 +537,7 @@ def test_accepts_document_file_at_upload_limit(
 
     assert len(file_content) == maximum_size_bytes
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -551,10 +561,10 @@ def test_accepts_document_file_at_upload_limit(
 
 
 def test_rejects_document_file_exceeding_upload_limit(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -568,7 +578,7 @@ def test_rejects_document_file_exceeding_upload_limit(
     maximum_size_bytes = settings.document_max_upload_size_bytes
     oversized_content = b"%PDF-1.7\n" + (b"x" * maximum_size_bytes)
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -584,7 +594,9 @@ def test_rejects_document_file_exceeding_upload_limit(
         "detail": "Document file exceeds maximum upload size"
     }
 
-    versions_response = client.get(f"/documents/{document['id']}/versions")
+    versions_response = authenticated_client.get(
+        f"/documents/{document['id']}/versions"
+    )
     assert versions_response.status_code == 200
     assert versions_response.json()["total"] == 0
 

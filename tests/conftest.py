@@ -1,6 +1,8 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +13,10 @@ from app.api import dependencies as api_dependencies
 from app.config import settings
 from app.database import engine, get_session
 from app.main import app
+from app.models.document import Document
+from app.models.user import User
+from app.models.user_session import UserSession
+from app.services import authentication as authentication_service
 from app.services.rate_limiting import DatabaseRateLimiter
 from app.storage.dependencies import get_document_storage
 from app.storage.local import LocalDocumentStorage
@@ -75,6 +81,90 @@ def db_session(
         join_transaction_mode="create_savepoint",
     ) as session:
         yield session
+
+
+@pytest.fixture
+def persisted_document_factory() -> Callable[..., Document]:
+    def create_persisted_document(
+        session: Session,
+        *,
+        title: str = "Cooling system",
+        file_name: str = "cooling-design.pdf",
+        status: str = "pending",
+    ) -> Document:
+        owner = User(
+            email=f"document-owner-{uuid4()}@example.com",
+            display_name="Document Owner",
+        )
+        session.add(owner)
+        session.flush()
+
+        document = Document(
+            owner_user_id=owner.id,
+            title=title,
+            file_name=file_name,
+            status=status,
+        )
+        session.add(document)
+        session.flush()
+
+        return document
+
+    return create_persisted_document
+
+
+@pytest.fixture
+def authenticated_user(
+    db_session: Session,
+) -> authentication_service.AuthenticatedUser:
+    current_time = datetime.now(
+        timezone.utc,
+    )
+
+    user = User(
+        email="authenticated@example.com",
+        display_name="Authenticated User",
+        email_verified_at=current_time,
+    )
+    db_session.add(user)
+    db_session.flush()
+
+    user_session = UserSession(
+        user_id=user.id,
+        token_hash="0" * 64,
+        expires_at=current_time
+        + timedelta(
+            hours=12,
+        ),
+    )
+    db_session.add(user_session)
+    db_session.flush()
+
+    return authentication_service.AuthenticatedUser(
+        user=user,
+        user_session=user_session,
+    )
+
+
+@pytest.fixture
+def authenticated_client(
+    client: TestClient,
+    authenticated_user: authentication_service.AuthenticatedUser,
+) -> Generator[TestClient, None, None]:
+    def override_authenticated_user() -> authentication_service.AuthenticatedUser:
+        return authenticated_user
+
+    app.dependency_overrides[api_dependencies.require_authenticated_user] = (
+        override_authenticated_user
+    )
+
+    try:
+        yield client
+    finally:
+        app.dependency_overrides.pop(
+            api_dependencies.require_authenticated_user,
+            None,
+        )
 
 
 @pytest.fixture

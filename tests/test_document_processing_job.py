@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.database import engine
 from app.domain import document_processing_job as processing_job_domain
-from app.models.document import Document
 from app.models.document_processing_job import (
     DocumentProcessingJob,
 )
@@ -18,7 +17,9 @@ from app.repositories import (
 )
 
 
-def test_database_persists_queued_document_processing_job() -> None:
+def test_database_persists_queued_document_processing_job(
+    persisted_document_factory,
+) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -29,11 +30,7 @@ def test_database_persists_queued_document_processing_job() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
-            document = Document(
-                title="Cooling system",
-                file_name="cooling-design.pdf",
-                status="pending",
-            )
+            document = persisted_document_factory(session)
             session.add(document)
             session.flush()
 
@@ -70,7 +67,9 @@ def test_database_persists_queued_document_processing_job() -> None:
         connection.close()
 
 
-def test_repository_reuses_existing_job_for_same_version() -> None:
+def test_repository_reuses_existing_job_for_same_version(
+    persisted_document_factory,
+) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -81,13 +80,7 @@ def test_repository_reuses_existing_job_for_same_version() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
-            document = Document(
-                title="Cooling system",
-                file_name="cooling-design.pdf",
-                status="pending",
-            )
-            session.add(document)
-            session.flush()
+            document = persisted_document_factory(session)
 
             document_version = DocumentVersion(
                 document_id=document.id,
@@ -128,7 +121,9 @@ def test_repository_reuses_existing_job_for_same_version() -> None:
         connection.close()
 
 
-def test_repository_transitions_job_through_successful_processing() -> None:
+def test_repository_transitions_job_through_successful_processing(
+    persisted_document_factory,
+) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -139,13 +134,7 @@ def test_repository_transitions_job_through_successful_processing() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
-            document = Document(
-                title="Cooling system",
-                file_name="cooling-design.pdf",
-                status="pending",
-            )
-            session.add(document)
-            session.flush()
+            document = persisted_document_factory(session)
 
             document_version = DocumentVersion(
                 document_id=document.id,
@@ -192,7 +181,7 @@ def test_repository_transitions_job_through_successful_processing() -> None:
         connection.close()
 
 
-def test_repository_requeues_failed_job_for_retry() -> None:
+def test_repository_requeues_failed_job_for_retry(persisted_document_factory) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -203,11 +192,7 @@ def test_repository_requeues_failed_job_for_retry() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
-            document = Document(
-                title="Cooling system",
-                file_name="cooling-design.pdf",
-                status="pending",
-            )
+            document = persisted_document_factory(session)
             session.add(document)
             session.flush()
 
@@ -269,7 +254,7 @@ def test_repository_requeues_failed_job_for_retry() -> None:
         connection.close()
 
 
-def test_repository_claims_queued_jobs_once() -> None:
+def test_repository_claims_queued_jobs_once(persisted_document_factory) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -280,13 +265,7 @@ def test_repository_claims_queued_jobs_once() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
-            document = Document(
-                title="Cooling system",
-                file_name="cooling-design.pdf",
-                status="pending",
-            )
-            session.add(document)
-            session.flush()
+            document = persisted_document_factory(session)
 
             document_versions = [
                 DocumentVersion(
@@ -360,7 +339,9 @@ def test_repository_rejects_requeue_after_maximum_attempts() -> None:
     session.flush.assert_not_called()
 
 
-def test_repository_claims_only_jobs_whose_retry_time_has_arrived() -> None:
+def test_repository_claims_only_jobs_whose_retry_time_has_arrived(
+    persisted_document_factory,
+) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -371,14 +352,9 @@ def test_repository_claims_only_jobs_whose_retry_time_has_arrived() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
-            document = Document(
-                title="Cooling system",
-                file_name="cooling-design.pdf",
-                status="pending",
+            document = persisted_document_factory(
+                session,
             )
-            session.add(document)
-            session.flush()
-
             document_versions = [
                 DocumentVersion(
                     document_id=document.id,

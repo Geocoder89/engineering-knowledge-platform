@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.database import engine
 from app.domain.document_version import DocumentContentIntegrityError
-from app.models.document import Document
 from app.models.document_page import DocumentPage
 from app.services import document_version as document_version_service
 from app.storage.local import LocalDocumentStorage
@@ -14,7 +13,7 @@ from tests.test_pdf_extraction import build_pdf_with_pages
 
 
 def test_extracts_and_persists_pages_from_stored_document_version(
-    tmp_path: Path,
+    tmp_path: Path, persisted_document_factory
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -29,13 +28,12 @@ def test_extracts_and_persists_pages_from_stored_document_version(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             file_content = build_pdf_with_pages(
                 (
@@ -95,7 +93,7 @@ def test_extracts_and_persists_pages_from_stored_document_version(
 
 #  Corrupted stored content must not be extracted persisted
 def test_rejects_corrupted_content_before_persisting_pages(
-    tmp_path: Path,
+    tmp_path: Path, persisted_document_factory
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -110,13 +108,12 @@ def test_rejects_corrupted_content_before_persisting_pages(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             original_content = build_pdf_with_pages(("Original cooling requirements",))
 

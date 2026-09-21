@@ -4,8 +4,8 @@ from uuid import UUID, uuid4
 from tests.test_pdf_extraction import build_pdf_with_pages
 
 
-def test_retrieves_document_processing_job_status(client) -> None:
-    create_response = client.post(
+def test_retrieves_document_processing_job_status(authenticated_client) -> None:
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -15,7 +15,7 @@ def test_retrieves_document_processing_job_status(client) -> None:
     assert create_response.status_code == 201
     document = create_response.json()
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -28,7 +28,7 @@ def test_retrieves_document_processing_job_status(client) -> None:
     assert upload_response.status_code == 201
     document_version = upload_response.json()
 
-    response = client.get(
+    response = authenticated_client.get(
         (
             f"/documents/{document['id']}/versions/"
             f"{document_version['version_number']}/processing-job"
@@ -52,11 +52,11 @@ def test_retrieves_document_processing_job_status(client) -> None:
 
 
 def test_returns_404_for_unknown_document_processing_job(
-    client,
+    authenticated_client,
 ) -> None:
     unknown_document_id = uuid4()
 
-    response = client.get(
+    response = authenticated_client.get(
         (f"/documents/{unknown_document_id}/versions/1/processing-job")
     )
 
@@ -65,9 +65,9 @@ def test_returns_404_for_unknown_document_processing_job(
 
 
 def test_returns_404_for_unknown_document_version_processing_job(
-    client,
+    authenticated_client,
 ) -> None:
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -77,7 +77,9 @@ def test_returns_404_for_unknown_document_version_processing_job(
     assert create_response.status_code == 201
     document = create_response.json()
 
-    response = client.get((f"/documents/{document['id']}/versions/1/processing-job"))
+    response = authenticated_client.get(
+        (f"/documents/{document['id']}/versions/1/processing-job")
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Document version not found"}

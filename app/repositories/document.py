@@ -7,9 +7,12 @@ from app.domain.document import DocumentStatus
 from app.models.document import Document
 
 
-def create_document(session: Session, *, title: str, file_name: str) -> Document:
+def create_document(
+    session: Session, *, owner_user_id: UUID, title: str, file_name: str
+) -> Document:
     document = Document(
         title=title,
+        owner_user_id=owner_user_id,
         file_name=file_name,
         status="pending",
     )
@@ -21,21 +24,40 @@ def create_document(session: Session, *, title: str, file_name: str) -> Document
 def get_document_by_id(
     session: Session,
     document_id: UUID,
+    *,
+    owner_user_id: UUID,
 ) -> Document | None:
-    return session.get(Document, document_id)
+    return session.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.owner_user_id == owner_user_id,
+        ),
+    )
 
 
 def list_documents(
-    session: Session, *, offset: int, limit: int, status: DocumentStatus | None = None
+    session: Session,
+    *,
+    owner_user_id: UUID,
+    offset: int,
+    limit: int,
+    status: DocumentStatus | None = None,
 ) -> list[Document]:
-    statement = select(Document)
+    statement = select(Document).where(
+        Document.owner_user_id == owner_user_id,
+    )
+
     if status is None:
         status_condition = Document.status != DocumentStatus.ARCHIVED.value
     else:
         status_condition = Document.status == status.value
+
     statement = statement.where(status_condition)
     statement = (
-        statement.order_by(Document.created_at.desc(), Document.id.desc())
+        statement.order_by(
+            Document.created_at.desc(),
+            Document.id.desc(),
+        )
         .offset(offset)
         .limit(limit)
     )
@@ -46,15 +68,24 @@ def list_documents(
 def count_documents(
     session: Session,
     *,
+    owner_user_id: UUID,
     status: DocumentStatus | None = None,
 ) -> int:
-    count_statement = select(func.count()).select_from(Document)
+    count_statement = (
+        select(func.count())
+        .select_from(Document)
+        .where(
+            Document.owner_user_id == owner_user_id,
+        )
+    )
+
     if status is None:
         status_condition = Document.status != DocumentStatus.ARCHIVED.value
     else:
         status_condition = Document.status == status.value
 
     count_statement = count_statement.where(status_condition)
+
     return session.scalar(count_statement) or 0
 
 
@@ -82,3 +113,15 @@ def update_document_metadata(
     session.flush()
 
     return document
+
+
+def get_document_by_id_for_processing(
+    session: Session,
+    document_id: UUID,
+) -> Document | None:
+    """Return a document for trusted background processing."""
+
+    return session.get(
+        Document,
+        document_id,
+    )

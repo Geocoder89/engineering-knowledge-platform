@@ -8,20 +8,21 @@ from app.models.document_processing_job import (
     DocumentProcessingJob,
 )
 from app.models.document_version import DocumentVersion
+from app.models.user import User
 from app.repositories import (
     document_processing_job as processing_job_repository,
 )
 
 
-def test_two_sessions_claim_different_processing_jobs() -> None:
+def test_two_sessions_claim_different_processing_jobs(
+    persisted_document_factory,
+) -> None:
     with SessionLocal.begin() as setup_session:
-        document = Document(
+        document = persisted_document_factory(
+            setup_session,
             title="Concurrent processing",
             file_name="concurrent-processing.pdf",
-            status="pending",
         )
-        setup_session.add(document)
-        setup_session.flush()
 
         document_versions = [
             DocumentVersion(
@@ -65,6 +66,9 @@ def test_two_sessions_claim_different_processing_jobs() -> None:
         ]
         expected_job_ids = [processing_job.id for processing_job in processing_jobs]
 
+        owner_user_id = document.owner_user_id
+        document_id = document.id
+
     try:
         with (
             SessionLocal() as first_session,
@@ -106,17 +110,23 @@ def test_two_sessions_claim_different_processing_jobs() -> None:
                 )
             )
             cleanup_session.execute(delete(Document).where(Document.id == document_id))
+            cleanup_session.execute(
+                delete(User).where(
+                    User.id == owner_user_id,
+                ),
+            )
 
 
-def test_rolled_back_claim_returns_job_to_queue() -> None:
+def test_rolled_back_claim_returns_job_to_queue(persisted_document_factory) -> None:
     with SessionLocal.begin() as setup_session:
-        document = Document(
+        document = persisted_document_factory(
+            setup_session,
             title="Rollback processing",
             file_name="rollback-processing.pdf",
-            status="pending",
         )
-        setup_session.add(document)
-        setup_session.flush()
+
+        owner_user_id = document.owner_user_id
+        document_id = document.id
 
         document_version = DocumentVersion(
             document_id=document.id,
@@ -195,3 +205,9 @@ def test_rolled_back_claim_returns_job_to_queue() -> None:
                 delete(DocumentVersion).where(DocumentVersion.id == document_version_id)
             )
             cleanup_session.execute(delete(Document).where(Document.id == document_id))
+
+            cleanup_session.execute(
+                delete(User).where(
+                    User.id == owner_user_id,
+                ),
+            )

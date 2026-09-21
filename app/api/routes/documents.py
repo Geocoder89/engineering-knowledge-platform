@@ -15,6 +15,7 @@ from fastapi import (
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import AuthenticatedUserDependency
 from app.config import settings
 from app.database import get_session
 from app.domain.document import DocumentStatus, InvalidDocumentStatusTransition
@@ -66,9 +67,16 @@ SessionDependency = Annotated[Session, Depends(get_session)]
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
-def create_document(document: DocumentCreate, session: SessionDependency) -> Document:
+def create_document(
+    document: DocumentCreate,
+    session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
+) -> Document:
     created_document = document_repository.create_document(
-        session, title=document.title, file_name=document.file_name
+        session,
+        owner_user_id=authenticated_user.user.id,
+        title=document.title,
+        file_name=document.file_name,
     )
     session.commit()
     return created_document
@@ -77,6 +85,7 @@ def create_document(document: DocumentCreate, session: SessionDependency) -> Doc
 @router.get("", response_model=DocumentListResponse)
 def list_documents(
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     document_status: Annotated[
@@ -84,25 +93,41 @@ def list_documents(
         Query(alias="status"),
     ] = None,
 ) -> DocumentListResponse:
+    owner_user_id = authenticated_user.user.id
     documents = document_repository.list_documents(
-        session, offset=offset, limit=limit, status=document_status
+        session,
+        owner_user_id=owner_user_id,
+        offset=offset,
+        limit=limit,
+        status=document_status,
     )
-    total = document_repository.count_documents(session, status=document_status)
+    total = document_repository.count_documents(
+        session, owner_user_id=owner_user_id, status=document_status
+    )
     return DocumentListResponse(
         items=documents, total=total, offset=offset, limit=limit
     )
 
 
-@router.get("/{document_id}", response_model=DocumentResponse)
-def get_document(document_id: UUID, session: SessionDependency) -> Document:
+@router.get(
+    "/{document_id}",
+    response_model=DocumentResponse,
+)
+def get_document(
+    document_id: UUID,
+    session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
+) -> Document:
     document = document_repository.get_document_by_id(
         session,
         document_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if document is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
         )
 
     return document
@@ -113,8 +138,11 @@ def transition_document_status(
     document_id: UUID,
     status_update: DocumentStatusUpdate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Document:
-    document = document_repository.get_document_by_id(session, document_id)
+    document = document_repository.get_document_by_id(
+        session, document_id, owner_user_id=authenticated_user.user.id
+    )
     if document is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
@@ -138,8 +166,13 @@ def update_document_metadata(
     document_id: UUID,
     document_update: DocumentUpdate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Document:
-    document = document_repository.get_document_by_id(session, document_id)
+    document = document_repository.get_document_by_id(
+        session,
+        document_id,
+        owner_user_id=authenticated_user.user.id,
+    )
 
     if document is None:
         raise HTTPException(
@@ -164,10 +197,13 @@ def update_document_metadata(
 def list_document_versions(
     document_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> DocumentVersionListResponse:
-    document = document_repository.get_document_by_id(session, document_id)
+    document = document_repository.get_document_by_id(
+        session, document_id, owner_user_id=authenticated_user.user.id
+    )
 
     if document is None:
         raise HTTPException(
@@ -196,10 +232,12 @@ def upload_document_version(
     file: Annotated[UploadFile, File()],
     session: SessionDependency,
     storage: DocumentStorageDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> DocumentVersion:
     document = document_repository.get_document_by_id(
         session,
         document_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if document is None:
@@ -259,8 +297,13 @@ def get_document_version(
     document_id: UUID,
     version_number: Annotated[int, Path(ge=1)],
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> DocumentVersion:
-    document = document_repository.get_document_by_id(session, document_id)
+    document = document_repository.get_document_by_id(
+        session,
+        document_id,
+        owner_user_id=authenticated_user.user.id,
+    )
 
     if document is None:
         raise HTTPException(
@@ -287,10 +330,12 @@ def retry_document_version_processing(
     document_id: UUID,
     version_number: Annotated[int, Path(ge=1)],
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Document:
     document = document_repository.get_document_by_id(
         session,
         document_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if document is None:
@@ -351,10 +396,10 @@ def get_document_version_processing_job(
     document_id: UUID,
     version_number: Annotated[int, Path(ge=1)],
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> DocumentProcessingJob:
     document = document_repository.get_document_by_id(
-        session,
-        document_id,
+        session, document_id, owner_user_id=authenticated_user.user.id
     )
 
     if document is None:
@@ -397,11 +442,11 @@ def download_document_version_content(
     document_id: UUID,
     version_number: Annotated[int, Path(ge=1)],
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
     storage: DocumentStorageDependency,
 ) -> Response:
     document = document_repository.get_document_by_id(
-        session,
-        document_id,
+        session, document_id, owner_user_id=authenticated_user.user.id
     )
 
     if document is None:

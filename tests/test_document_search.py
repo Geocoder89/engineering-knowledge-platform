@@ -9,7 +9,6 @@ from app.embeddings.base import (
     EmbeddingProvider,
     InvalidEmbeddingResponseError,
 )
-from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
@@ -17,7 +16,9 @@ from app.repositories import document_chunk as document_chunk_repository
 from app.services import document_search as document_search_service
 
 
-def test_repository_ranks_document_chunks_by_cosine_distance() -> None:
+def test_repository_ranks_document_chunks_by_cosine_distance(
+    persisted_document_factory,
+) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -28,13 +29,12 @@ def test_repository_ranks_document_chunks_by_cosine_distance() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="ready",
             )
-            session.add(document)
-            session.flush()
 
             document_version = DocumentVersion(
                 document_id=document.id,

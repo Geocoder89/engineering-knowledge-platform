@@ -12,7 +12,6 @@ from app.embeddings.base import (
     InvalidEmbeddingResponseError,
 )
 from app.main import app
-from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
@@ -209,18 +208,18 @@ def test_rejects_invalid_document_search_requests(
 def test_searches_persisted_document_chunks_through_api(
     client,
     db_session,
+    persisted_document_factory,
 ) -> None:
     query_embedding = tuple([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1))
     embedding_provider = Mock(spec=EmbeddingProvider)
     embedding_provider.embed_texts.return_value = (query_embedding,)
 
-    document = Document(
+    document = persisted_document_factory(
+        db_session,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",
     )
-    db_session.add(document)
-    db_session.flush()
 
     document_version = DocumentVersion(
         document_id=document.id,

@@ -2,9 +2,9 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 
-def test_create_document(client):
+def test_create_document(authenticated_client):
     payload = {"title": "cooling system", "file_name": "cooling-design.pdf"}
-    response = client.post("/documents", json=payload)
+    response = authenticated_client.post("/documents", json=payload)
 
     body = response.json()
     created_at = datetime.fromisoformat(body["created_at"])
@@ -19,45 +19,45 @@ def test_create_document(client):
     UUID(body["id"])
 
 
-def test_rejects_short_document_title(client):
+def test_rejects_short_document_title(authenticated_client):
     payload = {"title": "A", "file_name": "cooling-design.pdf"}
-    response = client.post("/documents", json=payload)
+    response = authenticated_client.post("/documents", json=payload)
     assert response.status_code == 422
 
 
-def test_rejects_empty_document_file_name(client):
+def test_rejects_empty_document_file_name(authenticated_client):
     payload = {"title": "A title", "file_name": ""}
-    response = client.post("/documents", json=payload)
+    response = authenticated_client.post("/documents", json=payload)
     assert response.status_code == 422
 
 
-def test_retrieves_created_document(client):
+def test_retrieves_created_document(authenticated_client):
     payload = {"title": "cooling system", "file_name": "cooling-design.pdf"}
-    create_response = client.post("/documents", json=payload)
+    create_response = authenticated_client.post("/documents", json=payload)
     assert create_response.status_code == 201
 
     created_document = create_response.json()
 
-    response = client.get(f"/documents/{created_document['id']}")
+    response = authenticated_client.get(f"/documents/{created_document['id']}")
     assert response.status_code == 200
 
     assert response.json() == created_document
 
 
-def test_returns_404_for_unknown_document(client):
+def test_returns_404_for_unknown_document(authenticated_client):
     unknown_id = uuid4()
-    response = client.get(f"/documents/{unknown_id}")
+    response = authenticated_client.get(f"/documents/{unknown_id}")
     assert response.status_code == 404
     assert response.json() == {"detail": "Document not found"}
 
 
-def test_rejects_malformed_document_id(client):
+def test_rejects_malformed_document_id(authenticated_client):
     malformed_id = "abc-def-ghi-jkl"
-    response = client.get(f"/documents/{malformed_id}")
+    response = authenticated_client.get(f"/documents/{malformed_id}")
     assert response.status_code == 422
 
 
-def test_lists_documents_with_pagination(client):
+def test_lists_documents_with_pagination(authenticated_client):
     payloads = [
         {
             "title": "Cooling system",
@@ -76,11 +76,11 @@ def test_lists_documents_with_pagination(client):
     created_ids = set()
 
     for payload in payloads:
-        response = client.post("/documents", json=payload)
+        response = authenticated_client.post("/documents", json=payload)
         assert response.status_code == 201
         created_ids.add(response.json()["id"])
 
-    first_response = client.get("/documents?offset=0&limit=2")
+    first_response = authenticated_client.get("/documents?offset=0&limit=2")
     assert first_response.status_code == 200
     first_page = first_response.json()
     assert first_page["total"] == 3
@@ -88,7 +88,7 @@ def test_lists_documents_with_pagination(client):
     assert first_page["limit"] == 2
     assert len(first_page["items"]) == 2
 
-    second_response = client.get("/documents?offset=2&limit=2")
+    second_response = authenticated_client.get("/documents?offset=2&limit=2")
     assert second_response.status_code == 200
     second_page = second_response.json()
 
@@ -103,14 +103,14 @@ def test_lists_documents_with_pagination(client):
     assert returned_ids == created_ids
 
 
-def test_rejects_invalid_document_pagination(client):
-    response = client.get("/documents?offset=-1&limit=0")
+def test_rejects_invalid_document_pagination(authenticated_client):
+    response = authenticated_client.get("/documents?offset=-1&limit=0")
 
     assert response.status_code == 422
 
 
-def test_transitions_document_through_valid_statuses(client):
-    create_response = client.post(
+def test_transitions_document_through_valid_statuses(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -120,7 +120,7 @@ def test_transitions_document_through_valid_statuses(client):
     document = create_response.json()
 
     for expected_status in ("processing", "ready", "archived"):
-        response = client.patch(
+        response = authenticated_client.patch(
             f"/documents/{document['id']}/status",
             json={"status": expected_status},
         )
@@ -130,8 +130,8 @@ def test_transitions_document_through_valid_statuses(client):
         assert response.json()["status"] == expected_status
 
 
-def test_rejects_retry_through_generic_status_endpoint(client):
-    create_response = client.post(
+def test_rejects_retry_through_generic_status_endpoint(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Electrical system",
@@ -141,7 +141,7 @@ def test_rejects_retry_through_generic_status_endpoint(client):
     document = create_response.json()
 
     for expected_status in ("processing", "failed"):
-        response = client.patch(
+        response = authenticated_client.patch(
             f"/documents/{document['id']}/status",
             json={"status": expected_status},
         )
@@ -149,7 +149,7 @@ def test_rejects_retry_through_generic_status_endpoint(client):
         assert response.status_code == 200
         assert response.json()["status"] == expected_status
 
-    retry_response = client.patch(
+    retry_response = authenticated_client.patch(
         f"/documents/{document['id']}/status",
         json={"status": "pending"},
     )
@@ -160,8 +160,8 @@ def test_rejects_retry_through_generic_status_endpoint(client):
     }
 
 
-def test_rejects_invalid_document_status_transition(client):
-    create_response = client.post(
+def test_rejects_invalid_document_status_transition(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Hydraulic system",
@@ -170,7 +170,7 @@ def test_rejects_invalid_document_status_transition(client):
     )
     document = create_response.json()
 
-    response = client.patch(
+    response = authenticated_client.patch(
         f"/documents/{document['id']}/status",
         json={"status": "ready"},
     )
@@ -181,8 +181,8 @@ def test_rejects_invalid_document_status_transition(client):
     }
 
 
-def test_rejects_unknown_document_status(client):
-    create_response = client.post(
+def test_rejects_unknown_document_status(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Structural system",
@@ -191,7 +191,7 @@ def test_rejects_unknown_document_status(client):
     )
     document = create_response.json()
 
-    response = client.patch(
+    response = authenticated_client.patch(
         f"/documents/{document['id']}/status",
         json={"status": "finished"},
     )
@@ -199,7 +199,7 @@ def test_rejects_unknown_document_status(client):
     assert response.status_code == 422
 
 
-def test_filters_documents_by_status(client):
+def test_filters_documents_by_status(authenticated_client):
     documents = []
 
     for title, file_name in (
@@ -207,7 +207,7 @@ def test_filters_documents_by_status(client):
         ("Electrical system", "electrical-design.pdf"),
         ("Hydraulic system", "hydraulic-design.pdf"),
     ):
-        response = client.post(
+        response = authenticated_client.post(
             "/documents", json={"title": title, "file_name": file_name}
         )
 
@@ -219,20 +219,20 @@ def test_filters_documents_by_status(client):
     pending_document = documents[2]
 
     for target_status in ("processing", "ready"):
-        response = client.patch(
+        response = authenticated_client.patch(
             f"/documents/{ready_document['id']}/status",
             json={"status": target_status},
         )
         assert response.status_code == 200
 
     for target_status in ("processing", "failed"):
-        response = client.patch(
+        response = authenticated_client.patch(
             f"/documents/{failed_document['id']}/status", json={"status": target_status}
         )
 
         assert response.status_code == 200
 
-    failed_response = client.get("/documents?status=failed")
+    failed_response = authenticated_client.get("/documents?status=failed")
 
     assert failed_response.status_code == 200
 
@@ -242,7 +242,7 @@ def test_filters_documents_by_status(client):
     assert failed_page["items"][0]["id"] == failed_document["id"]
     assert failed_page["items"][0]["status"] == "failed"
 
-    pending_response = client.get("/documents?status=pending")
+    pending_response = authenticated_client.get("/documents?status=pending")
 
     assert pending_response.status_code == 200
 
@@ -254,14 +254,14 @@ def test_filters_documents_by_status(client):
     assert pending_page["items"][0]["status"] == "pending"
 
 
-def test_rejects_unknown_document_status_filter(client):
-    response = client.get("/documents?status=finished")
+def test_rejects_unknown_document_status_filter(authenticated_client):
+    response = authenticated_client.get("/documents?status=finished")
 
     assert response.status_code == 422
 
 
-def test_partially_updates_document_metadata(client):
-    create_response = client.post(
+def test_partially_updates_document_metadata(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -273,7 +273,7 @@ def test_partially_updates_document_metadata(client):
     created_document = create_response.json()
     original_updated_at = datetime.fromisoformat(created_document["updated_at"])
 
-    update_response = client.patch(
+    update_response = authenticated_client.patch(
         f"/documents/{created_document['id']}",
         json={"title": "Updated cooling system"},
     )
@@ -289,14 +289,14 @@ def test_partially_updates_document_metadata(client):
     assert updated_document["status"] == created_document["status"]
     assert new_updated_at > original_updated_at
 
-    get_response = client.get(f"/documents/{created_document['id']}")
+    get_response = authenticated_client.get(f"/documents/{created_document['id']}")
 
     assert get_response.status_code == 200
     assert get_response.json() == updated_document
 
 
-def test_updates_document_file_name(client):
-    create_response = client.post(
+def test_updates_document_file_name(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Electrical system",
@@ -307,7 +307,7 @@ def test_updates_document_file_name(client):
 
     created_document = create_response.json()
 
-    update_response = client.patch(
+    update_response = authenticated_client.patch(
         f"/documents/{created_document['id']}",
         json={"file_name": "electrical-design-v2.pdf"},
     )
@@ -317,8 +317,8 @@ def test_updates_document_file_name(client):
     assert update_response.json()["file_name"] == "electrical-design-v2.pdf"
 
 
-def test_rejects_empty_document_metadata_update(client):
-    create_response = client.post(
+def test_rejects_empty_document_metadata_update(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Hydraulic system",
@@ -329,7 +329,7 @@ def test_rejects_empty_document_metadata_update(client):
 
     document = create_response.json()
 
-    response = client.patch(
+    response = authenticated_client.patch(
         f"/documents/{document['id']}",
         json={},
     )
@@ -337,8 +337,8 @@ def test_rejects_empty_document_metadata_update(client):
     assert response.status_code == 422
 
 
-def test_returns_404_when_updating_unknown_document(client):
-    response = client.patch(
+def test_returns_404_when_updating_unknown_document(authenticated_client):
+    response = authenticated_client.patch(
         f"/documents/{uuid4()}",
         json={"title": "Updated title"},
     )
@@ -347,8 +347,8 @@ def test_returns_404_when_updating_unknown_document(client):
     assert response.json() == {"detail": "Document not found"}
 
 
-def test_status_transition_updates_document_timestamp(client):
-    create_response = client.post(
+def test_status_transition_updates_document_timestamp(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -360,7 +360,7 @@ def test_status_transition_updates_document_timestamp(client):
     created_document = create_response.json()
     original_updated_at = datetime.fromisoformat(created_document["updated_at"])
 
-    update_response = client.patch(
+    update_response = authenticated_client.patch(
         f"/documents/{created_document['id']}/status",
         json={"status": "processing"},
     )
@@ -372,8 +372,8 @@ def test_status_transition_updates_document_timestamp(client):
     assert new_updated_at > original_updated_at
 
 
-def test_rejects_invalid_document_metadata_values(client):
-    create_response = client.post(
+def test_rejects_invalid_document_metadata_values(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -392,21 +392,21 @@ def test_rejects_invalid_document_metadata_values(client):
     )
 
     for payload in invalid_updates:
-        response = client.patch(
+        response = authenticated_client.patch(
             f"/documents/{document['id']}",
             json=payload,
         )
 
         assert response.status_code == 422, payload
 
-    get_response = client.get(f"/documents/{document['id']}")
+    get_response = authenticated_client.get(f"/documents/{document['id']}")
 
     assert get_response.status_code == 200
     assert get_response.json() == document
 
 
-def test_rejects_unsupported_document_metadata_field(client):
-    create_response = client.post(
+def test_rejects_unsupported_document_metadata_field(authenticated_client):
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Electrical system",
@@ -417,7 +417,7 @@ def test_rejects_unsupported_document_metadata_field(client):
 
     document = create_response.json()
 
-    response = client.patch(
+    response = authenticated_client.patch(
         f"/documents/{document['id']}",
         json={
             "title": "Updated electrical system",
@@ -427,14 +427,14 @@ def test_rejects_unsupported_document_metadata_field(client):
 
     assert response.status_code == 422
 
-    get_response = client.get(f"/documents/{document['id']}")
+    get_response = authenticated_client.get(f"/documents/{document['id']}")
 
     assert get_response.status_code == 200
     assert get_response.json() == document
 
 
-def test_excludes_archived_documents_from_default_listing(client):
-    active_response = client.post(
+def test_excludes_archived_documents_from_default_listing(authenticated_client):
+    active_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Active cooling system",
@@ -444,7 +444,7 @@ def test_excludes_archived_documents_from_default_listing(client):
     assert active_response.status_code == 201
     active_document = active_response.json()
 
-    archived_response = client.post(
+    archived_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Archived cooling system",
@@ -455,13 +455,13 @@ def test_excludes_archived_documents_from_default_listing(client):
     archived_document = archived_response.json()
 
     for target_status in ("processing", "ready", "archived"):
-        transition_response = client.patch(
+        transition_response = authenticated_client.patch(
             f"/documents/{archived_document['id']}/status",
             json={"status": target_status},
         )
         assert transition_response.status_code == 200
 
-    default_response = client.get("/documents")
+    default_response = authenticated_client.get("/documents")
 
     assert default_response.status_code == 200
 
@@ -471,7 +471,7 @@ def test_excludes_archived_documents_from_default_listing(client):
     assert len(default_page["items"]) == 1
     assert default_page["items"][0]["id"] == active_document["id"]
 
-    archived_list_response = client.get("/documents?status=archived")
+    archived_list_response = authenticated_client.get("/documents?status=archived")
 
     assert archived_list_response.status_code == 200
 
@@ -481,7 +481,9 @@ def test_excludes_archived_documents_from_default_listing(client):
     assert len(archived_page["items"]) == 1
     assert archived_page["items"][0]["id"] == archived_document["id"]
 
-    archived_get_response = client.get(f"/documents/{archived_document['id']}")
+    archived_get_response = authenticated_client.get(
+        f"/documents/{archived_document['id']}"
+    )
 
     assert archived_get_response.status_code == 200
     assert archived_get_response.json()["status"] == "archived"
