@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import engine
 from app.domain.document import DocumentStatus
 from app.models.document import Document
+from app.models.user import User
 from app.repositories import document_processing_job as processing_job_repository
 from app.repositories import document_version as document_version_repository
 from app.services import document as document_service
@@ -33,7 +34,16 @@ def test_retries_failed_document_processing(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
+
+            owner = User(
+                email="retry-test-owner@example.com",
+                display_name="Retry Test Owner",
+            )
+            session.add(owner)
+            session.flush()
+
             document = Document(
+                owner_user_id=owner.id,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
@@ -98,10 +108,10 @@ def test_retries_failed_document_processing(
 
 
 def test_retries_failed_document_version_through_api(
-    client,
+    authenticated_client,
     db_session: Session,
 ) -> None:
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -111,7 +121,7 @@ def test_retries_failed_document_version_through_api(
     assert create_response.status_code == 201
     created_document = create_response.json()
 
-    upload_response = client.post(
+    upload_response = authenticated_client.post(
         f"/documents/{created_document['id']}/versions",
         files={
             "file": (
@@ -166,13 +176,13 @@ def test_retries_failed_document_version_through_api(
         f"/documents/{document_id}/versions/{uploaded_version['version_number']}/retry"
     )
 
-    response = client.post(retry_url)
+    response = authenticated_client.post(retry_url)
 
     assert response.status_code == 200
     assert response.json()["id"] == str(document_id)
     assert response.json()["status"] == "pending"
 
-    duplicate_retry_response = client.post(retry_url)
+    duplicate_retry_response = authenticated_client.post(retry_url)
     assert duplicate_retry_response.status_code == 409
 
     assert duplicate_retry_response.json() == {

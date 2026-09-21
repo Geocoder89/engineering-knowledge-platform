@@ -18,7 +18,6 @@ from app.embeddings.base import (
     EmbeddingProviderError,
     EmbeddingVector,
 )
-from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_processing_job import (
@@ -69,7 +68,7 @@ class InvalidDimensionEmbeddingProvider:
 
 
 def test_processes_document_job_successfully(
-    tmp_path: Path,
+    tmp_path: Path, persisted_document_factory
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -85,13 +84,12 @@ def test_processes_document_job_successfully(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             file_content = build_pdf_with_pages(
                 (
@@ -218,6 +216,7 @@ def test_processes_document_job_successfully(
 
 def test_records_failed_document_processing_job(
     tmp_path: Path,
+    persisted_document_factory,
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -233,13 +232,12 @@ def test_records_failed_document_processing_job(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             original_content = build_pdf_with_pages(("Original cooling requirements",))
 
@@ -296,8 +294,7 @@ def test_records_failed_document_processing_job(
 
 
 def test_worker_claims_and_processes_next_queued_job(
-    caplog,
-    tmp_path: Path,
+    caplog, tmp_path: Path, persisted_document_factory
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -313,13 +310,12 @@ def test_worker_claims_and_processes_next_queued_job(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             document_version = document_version_service.upload_document_version(
                 session,
@@ -582,6 +578,7 @@ def test_records_failed_job_for_invalid_embedding_response(
     tmp_path: Path,
     embedding_provider: EmbeddingProvider,
     expected_error_message: str,
+    persisted_document_factory,
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -596,13 +593,12 @@ def test_records_failed_job_for_invalid_embedding_response(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             document_version = document_version_service.upload_document_version(
                 session,
@@ -649,8 +645,7 @@ def test_records_failed_job_for_invalid_embedding_response(
 
 
 def test_retries_temporary_embedding_error_after_delay(
-    tmp_path: Path,
-    monkeypatch,
+    tmp_path: Path, monkeypatch, persisted_document_factory
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -680,13 +675,12 @@ def test_retries_temporary_embedding_error_after_delay(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             document_version = document_version_service.upload_document_version(
                 session,
@@ -769,6 +763,7 @@ def test_retries_temporary_embedding_error_after_delay(
 
 def test_fails_temporary_embedding_error_after_maximum_attempts(
     tmp_path: Path,
+    persisted_document_factory,
 ) -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
@@ -783,13 +778,12 @@ def test_fails_temporary_embedding_error_after_maximum_attempts(
             storage = LocalDocumentStorage(
                 root_path=tmp_path / "document-storage",
             )
-            document = Document(
+            document = persisted_document_factory(
+                session,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
             )
-            session.add(document)
-            session.flush()
 
             document_version = document_version_service.upload_document_version(
                 session,

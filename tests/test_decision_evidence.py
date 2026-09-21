@@ -12,6 +12,7 @@ from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
+from app.models.user import User
 from app.repositories import (
     decision_evidence as decision_evidence_repository,
 )
@@ -48,7 +49,15 @@ def create_evidence_test_graph(
     session.add(alternative)
     session.flush()
 
+    document_owner = User(
+        email=f"document-owner-{uuid4()}@example.com",
+        display_name="Document Owner",
+    )
+    session.add(document_owner)
+    session.flush()
+
     document = Document(
+        owner_user_id=document_owner.id,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",

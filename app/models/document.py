@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, String, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -20,6 +20,17 @@ class Document(Base):
         primary_key=True,
         default=uuid4,
     )
+
+    owner_user_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "users.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     file_name: Mapped[str] = mapped_column(
         String(255),

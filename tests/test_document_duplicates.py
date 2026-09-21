@@ -5,16 +5,17 @@ from sqlalchemy.orm import Session
 from app.database import engine
 from app.models.document import Document
 from app.models.document_version import DocumentVersion
+from app.models.user import User
 from app.repositories import (
     document_version as document_version_repository,
 )
 
 
 def test_rejects_duplicate_content_for_same_document(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -26,7 +27,7 @@ def test_rejects_duplicate_content_for_same_document(
     document = create_response.json()
     file_content = b"%PDF-1.7\nCooling system design"
 
-    first_response = client.post(
+    first_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -39,7 +40,7 @@ def test_rejects_duplicate_content_for_same_document(
 
     assert first_response.status_code == 201
 
-    duplicate_response = client.post(
+    duplicate_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -55,7 +56,9 @@ def test_rejects_duplicate_content_for_same_document(
         "detail": "This document version has already been uploaded"
     }
 
-    versions_response = client.get(f"/documents/{document['id']}/versions")
+    versions_response = authenticated_client.get(
+        f"/documents/{document['id']}/versions"
+    )
 
     assert versions_response.status_code == 200
     assert versions_response.json()["total"] == 1
@@ -67,7 +70,7 @@ def test_rejects_duplicate_content_for_same_document(
 
 
 def test_allows_identical_content_for_different_documents(
-    client,
+    authenticated_client,
     document_storage_path,
 ):
     file_content = b"%PDF-1.7\nShared engineering reference"
@@ -77,7 +80,7 @@ def test_allows_identical_content_for_different_documents(
         ("Cooling system", "cooling-design.pdf"),
         ("Electrical system", "electrical-design.pdf"),
     ):
-        create_response = client.post(
+        create_response = authenticated_client.post(
             "/documents",
             json={
                 "title": title,
@@ -88,7 +91,7 @@ def test_allows_identical_content_for_different_documents(
 
         document = create_response.json()
 
-        upload_response = client.post(
+        upload_response = authenticated_client.post(
             f"/documents/{document['id']}/versions",
             files={
                 "file": (
@@ -121,7 +124,14 @@ def test_database_rejects_duplicate_content_for_same_document():
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
+            owner = User(
+                email="duplicate-test-owner@example.com",
+                display_name="Duplicate Test Owner",
+            )
+            session.add(owner)
+            session.flush()
             document = Document(
+                owner_user_id=owner.id,
                 title="Cooling system",
                 file_name="cooling-design.pdf",
                 status="pending",
@@ -164,11 +174,11 @@ def test_database_rejects_duplicate_content_for_same_document():
 
 
 def test_maps_database_duplicate_race_to_conflict(
-    client,
+    authenticated_client,
     document_storage_path,
     monkeypatch,
 ):
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/documents",
         json={
             "title": "Cooling system",
@@ -180,7 +190,7 @@ def test_maps_database_duplicate_race_to_conflict(
     document = create_response.json()
     file_content = b"%PDF-1.7\nCooling system design"
 
-    first_response = client.post(
+    first_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (
@@ -206,7 +216,7 @@ def test_maps_database_duplicate_race_to_conflict(
         simulate_missed_duplicate,
     )
 
-    duplicate_response = client.post(
+    duplicate_response = authenticated_client.post(
         f"/documents/{document['id']}/versions",
         files={
             "file": (

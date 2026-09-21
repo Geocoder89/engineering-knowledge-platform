@@ -4,7 +4,7 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, and CSRF/Origin protection are implemented. Resource-level authorization/ownership, identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, and authenticated document ownership are implemented. Decision ownership, identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
 
 ## Why This Project Exists
 
@@ -72,6 +72,14 @@ This platform creates a structured decision record that connects each outcome to
 - Server-side session expiry and logout revocation
 - Authenticated current-user lookup through `GET /users/me`
 - Generic resend-verification responses to avoid exposing whether an account exists
+
+### Document authorization
+
+- Authentication required for document creation, listing, retrieval, updates, uploads, versions, processing retries, processing status, and stored content
+- Document ownership derived from the authenticated user rather than request data
+- Owner-scoped document retrieval, pagination, filtering, and counts
+- Cross-owner access handled as `404 Not Found` to avoid revealing resource existence
+- Explicit trusted-worker lookup kept separate from browser-facing owner-scoped access
 
 ## Decision Lifecycle
 
@@ -430,12 +438,14 @@ tests/               Unit, integration, API, and worker tests
 - Session expiry and logout revocation
 - Authenticated current-user endpoint
 
-### Next identity and security work
+### Resource authorization — in progress
 
-- Resource-level authorization and ownership rules for documents and decisions
-- Creator and reviewer attribution
-- Actor identity in decision audit events
-- Additional abuse protection and authentication hardening
+- Document ownership and authorization — implemented
+- Decision ownership and authorization — planned
+- Search, evidence, and audit-history scoping — planned
+- Creator and reviewer attribution — planned
+- Actor identity in decision audit events — planned
+- Additional abuse protection and authentication hardening — planned
 
 ### Production readiness
 

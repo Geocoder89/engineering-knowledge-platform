@@ -9,13 +9,21 @@ from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
+from app.models.user import User
 from app.services import decision_record as decision_record_service
 
 
 def create_record_source_chunk(
     session: Session,
 ) -> DocumentChunk:
+    document_owner = User(
+        email=f"document-owner-{uuid4()}@example.com",
+        display_name="Document Owner",
+    )
+    session.add(document_owner)
+    session.flush()
     document = Document(
+        owner_user_id=document_owner.id,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",

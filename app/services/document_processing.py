@@ -47,7 +47,7 @@ def process_document_job(
     if document_version is None:
         raise RuntimeError("Processing job document version was not found")
 
-    document = document_repository.get_document_by_id(
+    document = document_repository.get_document_by_id_for_processing(
         session, document_version.document_id
     )
 
