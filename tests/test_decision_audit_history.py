@@ -22,6 +22,7 @@ from app.repositories import (
 from app.services import (
     decision_review as decision_review_service,
 )
+from app.services.authentication import AuthenticatedUser
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,8 +94,10 @@ def create_audit_source_graph(
 
 def test_database_persists_decision_audit_event(
     db_session: Session,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -133,8 +136,10 @@ def test_database_persists_decision_audit_event(
 def test_database_rejects_decision_audit_event_mutation(
     db_session: Session,
     operation: str,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -216,8 +221,10 @@ def test_database_rejects_invalid_decision_audit_event(
     sequence_number: int,
     event_type: str,
     event_data: object,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -251,8 +258,10 @@ def test_database_rejects_invalid_decision_audit_event(
 
 def test_database_protects_decision_with_audit_history(
     db_session: Session,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -280,8 +289,10 @@ def test_database_protects_decision_with_audit_history(
 
 def test_repository_appends_and_lists_decision_audit_events(
     db_session: Session,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -331,7 +342,7 @@ def test_repository_appends_and_lists_decision_audit_events(
 
 
 def test_creating_decision_records_audit_event(
-    client,
+    authenticated_client,
     db_session: Session,
 ) -> None:
     payload = {
@@ -339,7 +350,7 @@ def test_creating_decision_records_audit_event(
         "question": ("Should the maximum cooling-system pressure be reduced?"),
     }
 
-    response = client.post(
+    response = authenticated_client.post(
         "/decisions",
         json=payload,
     )
@@ -370,10 +381,10 @@ def test_creating_decision_records_audit_event(
 
 
 def test_records_decision_alternative_audit_history(
-    client,
+    authenticated_client,
     db_session: Session,
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -388,7 +399,7 @@ def test_records_decision_alternative_audit_history(
     updated_title = "Reduce the maximum operating pressure"
     description = "Lower the approved maximum pressure to improve the safety margin."
 
-    create_response = client.post(
+    create_response = authenticated_client.post(
         f"/decisions/{decision['id']}/alternatives",
         json={
             "title": original_title,
@@ -400,7 +411,7 @@ def test_records_decision_alternative_audit_history(
 
     alternative = create_response.json()
 
-    update_response = client.patch(
+    update_response = authenticated_client.patch(
         (f"/decisions/{decision['id']}/alternatives/{alternative['id']}"),
         json={
             "title": updated_title,
@@ -409,7 +420,7 @@ def test_records_decision_alternative_audit_history(
 
     assert update_response.status_code == 200
 
-    delete_response = client.delete(
+    delete_response = authenticated_client.delete(
         (f"/decisions/{decision['id']}/alternatives/{alternative['id']}"),
     )
 
@@ -460,10 +471,10 @@ def test_records_decision_alternative_audit_history(
 
 
 def test_records_decision_evidence_audit_history(
-    client,
+    authenticated_client,
     db_session: Session,
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -475,7 +486,7 @@ def test_records_decision_evidence_audit_history(
 
     decision = decision_response.json()
 
-    alternative_response = client.post(
+    alternative_response = authenticated_client.post(
         f"/decisions/{decision['id']}/alternatives",
         json={
             "title": "Reduce the pressure limit",
@@ -498,7 +509,7 @@ def test_records_decision_evidence_audit_history(
         f"/decisions/{decision['id']}/alternatives/{alternative['id']}/evidence"
     )
 
-    create_response = client.post(
+    create_response = authenticated_client.post(
         evidence_url,
         json={
             "document_chunk_id": str(
@@ -513,7 +524,7 @@ def test_records_decision_evidence_audit_history(
 
     evidence = create_response.json()
 
-    delete_response = client.delete(
+    delete_response = authenticated_client.delete(
         f"{evidence_url}/{evidence['id']}",
     )
 
@@ -561,8 +572,10 @@ def test_records_decision_evidence_audit_history(
 def test_service_records_submission_and_finalization_audit_history(
     db_session: Session,
     monkeypatch,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -681,8 +694,10 @@ def test_service_records_submission_and_finalization_audit_history(
 def test_service_records_cancellation_audit_history(
     db_session: Session,
     monkeypatch,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -730,9 +745,9 @@ def test_service_records_cancellation_audit_history(
 
 
 def test_gets_decision_audit_history_in_sequence_order(
-    client,
+    authenticated_client,
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -744,7 +759,7 @@ def test_gets_decision_audit_history_in_sequence_order(
 
     decision = decision_response.json()
 
-    alternative_response = client.post(
+    alternative_response = authenticated_client.post(
         f"/decisions/{decision['id']}/alternatives",
         json={
             "title": "Reduce the pressure limit",
@@ -758,7 +773,7 @@ def test_gets_decision_audit_history_in_sequence_order(
 
     alternative = alternative_response.json()
 
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{decision['id']}/history?offset=0&limit=10",
     )
 
@@ -785,7 +800,7 @@ def test_gets_decision_audit_history_in_sequence_order(
         "position": alternative["position"],
     }
 
-    page_response = client.get(
+    page_response = authenticated_client.get(
         f"/decisions/{decision['id']}/history?offset=1&limit=1",
     )
 
@@ -801,9 +816,9 @@ def test_gets_decision_audit_history_in_sequence_order(
 
 
 def test_returns_404_for_unknown_decision_audit_history(
-    client,
+    authenticated_client,
 ) -> None:
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{uuid4()}/history",
     )
 
@@ -822,10 +837,10 @@ def test_returns_404_for_unknown_decision_audit_history(
     ],
 )
 def test_rejects_invalid_decision_audit_history_pagination(
-    client,
+    authenticated_client,
     query: str,
 ) -> None:
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{uuid4()}/history?{query}",
     )
 
@@ -833,9 +848,9 @@ def test_rejects_invalid_decision_audit_history_pagination(
 
 
 def test_rejects_malformed_decision_audit_history_id(
-    client,
+    authenticated_client,
 ) -> None:
-    response = client.get(
+    response = authenticated_client.get(
         "/decisions/not-a-uuid/history",
     )
 

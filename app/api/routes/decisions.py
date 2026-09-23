@@ -5,6 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import (
+    AuthenticatedUserDependency,
+)
 from app.database import get_session
 from app.domain.decision import (
     DecisionNotEditable,
@@ -121,9 +124,11 @@ def build_decision_evidence_response(
 def create_decision(
     decision: DecisionCreate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Decision:
     created_decision = decision_repository.create_decision(
         session,
+        owner_user_id=authenticated_user.user.id,
         title=decision.title,
         question=decision.question,
     )
@@ -140,16 +145,20 @@ def create_decision(
 )
 def list_decisions(
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> DecisionListResponse:
+    owner_user_id = authenticated_user.user.id
     decisions = decision_repository.list_decisions(
         session,
+        owner_user_id=owner_user_id,
         offset=offset,
         limit=limit,
     )
     total = decision_repository.count_decisions(
         session,
+        owner_user_id=owner_user_id,
     )
 
     return DecisionListResponse(
@@ -167,10 +176,13 @@ def list_decisions(
 def get_decision(
     decision_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Decision:
+    owner_user_id = authenticated_user.user.id
     decision = decision_repository.get_decision_by_id(
         session,
         decision_id,
+        owner_user_id=owner_user_id,
     )
 
     if decision is None:
@@ -189,10 +201,12 @@ def get_decision(
 def get_assembled_decision_record(
     decision_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> DecisionRecordResponse:
     record = decision_record_service.get_decision_record(
         session,
         decision_id=decision_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if record is None:
@@ -294,10 +308,10 @@ def create_decision_alternative(
 def list_decision_alternatives(
     decision_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> list[DecisionAlternative]:
     decision = decision_repository.get_decision_by_id(
-        session,
-        decision_id,
+        session, decision_id, owner_user_id=authenticated_user.user.id
     )
 
     if decision is None:
@@ -568,10 +582,10 @@ def list_decision_evidence(
     decision_id: UUID,
     alternative_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> list[DecisionEvidenceResponse]:
     decision = decision_repository.get_decision_by_id(
-        session,
-        decision_id,
+        session, decision_id, owner_user_id=authenticated_user.user.id
     )
 
     if decision is None:
@@ -800,12 +814,14 @@ def cancel_decision(
 def get_decision_audit_history(
     decision_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> DecisionAuditHistoryResponse:
     decision = decision_repository.get_decision_by_id(
         session,
         decision_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if decision is None:

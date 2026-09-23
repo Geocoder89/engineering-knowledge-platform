@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from unittest.mock import Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -24,12 +24,23 @@ from app.models.user import User
 from app.services import (
     decision_review as decision_review_service,
 )
+from app.services.authentication import AuthenticatedUser
 
 
 def create_reviewable_decision(
-    session: Session,
+    session: Session, *, owner_user_id: UUID | None = None
 ) -> Decision:
+    if owner_user_id is None:
+        owner = User(
+            email=f"resource-owner-{uuid4()}@example.com",
+            display_name="Resource Owner",
+        )
+        session.add(owner)
+        session.flush()
+        owner_user_id = owner.id
+
     decision = Decision(
+        owner_user_id=owner_user_id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -55,15 +66,8 @@ def create_reviewable_decision(
     session.add_all(alternatives)
     session.flush()
 
-    document_owner = User(
-        email=f"document-owner-{uuid4()}@example.com",
-        display_name="Document Owner",
-    )
-    session.add(document_owner)
-    session.flush()
-
     document = Document(
-        owner_user_id=document_owner.id,
+        owner_user_id=owner_user_id,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",
@@ -209,7 +213,7 @@ def test_rejects_invalid_decision_status_transition(
 
 
 def test_database_persists_decision_review_outcome_fields(
-    db_session: Session,
+    db_session: Session, authenticated_user: AuthenticatedUser
 ) -> None:
     expected_columns = {
         "selected_alternative_id",
@@ -242,6 +246,7 @@ def test_database_persists_decision_review_outcome_fields(
     )
 
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -342,6 +347,7 @@ def test_service_submits_complete_decision_for_review(
     )
     decision = Decision(
         id=uuid4(),
+        owner_user_id=uuid4(),
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
         status="draft",
@@ -409,12 +415,14 @@ def test_service_submits_complete_decision_for_review(
 
 
 def test_submits_complete_decision_for_review(
-    client,
+    authenticated_client,
     db_session: Session,
+    authenticated_user: AuthenticatedUser,
     monkeypatch,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     submitted_at = datetime(
         2026,
@@ -431,7 +439,7 @@ def test_submits_complete_decision_for_review(
         lambda: submitted_at,
     )
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
@@ -458,12 +466,14 @@ def test_submits_complete_decision_for_review(
 
 
 def test_finalizes_decision_with_selected_alternative(
-    client,
+    authenticated_client,
     db_session: Session,
     monkeypatch,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     selected_alternative = db_session.scalar(
         select(DecisionAlternative).where(
@@ -503,7 +513,7 @@ def test_finalizes_decision_with_selected_alternative(
         lambda: next(timestamps),
     )
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
@@ -513,7 +523,7 @@ def test_finalizes_decision_with_selected_alternative(
         "Reducing the pressure limit provides the "
         "strongest documented safety improvement."
     )
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision.id}/decide",
         json={
             "selected_alternative_id": str(
@@ -556,12 +566,13 @@ def test_finalizes_decision_with_selected_alternative(
 
 
 def test_cancels_decision_under_review(
-    client,
+    authenticated_client,
     db_session: Session,
     monkeypatch,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
-        db_session,
+        db_session, owner_user_id=authenticated_user.user.id
     )
     submitted_at = datetime(
         2026,
@@ -592,7 +603,7 @@ def test_cancels_decision_under_review(
         lambda: next(timestamps),
     )
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
@@ -601,7 +612,7 @@ def test_cancels_decision_under_review(
     cancellation_reason = (
         "The project requirements changed before a final alternative was selected."
     )
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision.id}/cancel",
         json={
             "rationale": cancellation_reason,
@@ -647,12 +658,14 @@ def test_cancels_decision_under_review(
     ],
 )
 def test_prevents_alternative_changes_after_submission(
-    client,
+    authenticated_client,
     db_session: Session,
     operation: str,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     alternative = db_session.scalar(
         select(DecisionAlternative).where(
@@ -663,7 +676,7 @@ def test_prevents_alternative_changes_after_submission(
 
     assert alternative is not None
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
@@ -672,7 +685,7 @@ def test_prevents_alternative_changes_after_submission(
     alternatives_url = f"/decisions/{decision.id}/alternatives"
 
     if operation == "create":
-        response = client.post(
+        response = authenticated_client.post(
             alternatives_url,
             json={
                 "title": "Replace the pressure system",
@@ -682,14 +695,14 @@ def test_prevents_alternative_changes_after_submission(
             },
         )
     elif operation == "update":
-        response = client.patch(
+        response = authenticated_client.patch(
             f"{alternatives_url}/{alternative.id}",
             json={
                 "title": "Change the existing alternative",
             },
         )
     else:
-        response = client.delete(
+        response = authenticated_client.delete(
             f"{alternatives_url}/{alternative.id}",
         )
 
@@ -707,12 +720,14 @@ def test_prevents_alternative_changes_after_submission(
     ],
 )
 def test_prevents_evidence_changes_after_submission(
-    client,
+    authenticated_client,
     db_session: Session,
     operation: str,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
 
     existing_evidence = db_session.scalar(
@@ -737,14 +752,14 @@ def test_prevents_evidence_changes_after_submission(
 
     assert other_alternative is not None
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
     assert submit_response.status_code == 200
 
     if operation == "create":
-        response = client.post(
+        response = authenticated_client.post(
             (f"/decisions/{decision.id}/alternatives/{other_alternative.id}/evidence"),
             json={
                 "document_chunk_id": str(
@@ -757,7 +772,7 @@ def test_prevents_evidence_changes_after_submission(
             },
         )
     else:
-        response = client.delete(
+        response = authenticated_client.delete(
             (
                 f"/decisions/{decision.id}"
                 f"/alternatives/"
@@ -793,12 +808,14 @@ def test_prevents_evidence_changes_after_submission(
     ],
 )
 def test_api_rejects_incomplete_decision_submission(
-    client,
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
     alternative_count: int,
     expected_detail: str,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -822,7 +839,7 @@ def test_api_rejects_incomplete_decision_submission(
 
     db_session.flush()
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
@@ -852,12 +869,14 @@ def test_api_rejects_incomplete_decision_submission(
     ],
 )
 def test_api_rejects_invalid_decision_transition(
-    client,
+    authenticated_client,
     db_session: Session,
     scenario: str,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     selected_alternative = db_session.scalar(
         select(DecisionAlternative).where(
@@ -869,19 +888,19 @@ def test_api_rejects_invalid_decision_transition(
     assert selected_alternative is not None
 
     if scenario == "submit_twice":
-        first_response = client.post(
+        first_response = authenticated_client.post(
             f"/decisions/{decision.id}/submit",
         )
 
         assert first_response.status_code == 200
 
-        response = client.post(
+        response = authenticated_client.post(
             f"/decisions/{decision.id}/submit",
         )
         expected_status = "in_review"
 
     elif scenario == "decide_from_draft":
-        response = client.post(
+        response = authenticated_client.post(
             f"/decisions/{decision.id}/decide",
             json={
                 "selected_alternative_id": str(
@@ -896,13 +915,13 @@ def test_api_rejects_invalid_decision_transition(
         expected_status = "draft"
 
     else:
-        submit_response = client.post(
+        submit_response = authenticated_client.post(
             f"/decisions/{decision.id}/submit",
         )
 
         assert submit_response.status_code == 200
 
-        decide_response = client.post(
+        decide_response = authenticated_client.post(
             f"/decisions/{decision.id}/decide",
             json={
                 "selected_alternative_id": str(
@@ -917,7 +936,7 @@ def test_api_rejects_invalid_decision_transition(
 
         assert decide_response.status_code == 200
 
-        response = client.post(
+        response = authenticated_client.post(
             f"/decisions/{decision.id}/cancel",
             json={
                 "rationale": (
@@ -949,14 +968,17 @@ def test_api_rejects_invalid_decision_transition(
 
 
 def test_rejects_selected_alternative_from_another_decision(
-    client,
+    authenticated_client,
     db_session: Session,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
 
     other_decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Electrical cable selection",
         question=("Which electrical cable specification should the project adopt?"),
     )
@@ -972,13 +994,13 @@ def test_rejects_selected_alternative_from_another_decision(
     db_session.add(foreign_alternative)
     db_session.flush()
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
     assert submit_response.status_code == 200
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision.id}/decide",
         json={
             "selected_alternative_id": str(
@@ -1040,13 +1062,15 @@ def test_rejects_selected_alternative_from_another_decision(
     ],
 )
 def test_rejects_invalid_decision_review_request(
-    client,
+    authenticated_client,
     db_session: Session,
     operation: str,
     invalid_case: str,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     selected_alternative = db_session.scalar(
         select(DecisionAlternative).where(
@@ -1057,7 +1081,7 @@ def test_rejects_invalid_decision_review_request(
 
     assert selected_alternative is not None
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
@@ -1091,7 +1115,7 @@ def test_rejects_invalid_decision_review_request(
     else:
         payload["unexpected_field"] = "not allowed"
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision.id}/{operation}",
         json=payload,
     )
@@ -1114,11 +1138,13 @@ def test_rejects_invalid_decision_review_request(
 
 
 def test_cancels_draft_decision(
-    client,
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
     monkeypatch,
 ) -> None:
     decision = Decision(
+        owner_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -1141,7 +1167,7 @@ def test_cancels_draft_decision(
     )
 
     rationale = "The decision is no longer required because the project scope changed."
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision.id}/cancel",
         json={
             "rationale": rationale,
@@ -1177,11 +1203,13 @@ def test_cancels_draft_decision(
 
 
 def test_keeps_decision_context_readable_after_submission(
-    client,
+    authenticated_client,
     db_session: Session,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision = create_reviewable_decision(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     evidence = db_session.scalar(
         select(DecisionEvidence)
@@ -1196,16 +1224,16 @@ def test_keeps_decision_context_readable_after_submission(
 
     assert evidence is not None
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision.id}/submit",
     )
 
     assert submit_response.status_code == 200
 
-    alternatives_response = client.get(
+    alternatives_response = authenticated_client.get(
         f"/decisions/{decision.id}/alternatives",
     )
-    evidence_response = client.get(
+    evidence_response = authenticated_client.get(
         (
             f"/decisions/{decision.id}"
             f"/alternatives/{evidence.decision_alternative_id}"

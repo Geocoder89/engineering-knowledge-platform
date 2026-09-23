@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -16,6 +16,7 @@ from app.models.user import User
 from app.repositories import (
     decision_evidence as decision_evidence_repository,
 )
+from app.services.authentication import AuthenticatedUser
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,9 +30,18 @@ class EvidenceTestGraph:
 
 
 def create_evidence_test_graph(
-    session: Session,
+    session: Session, *, owner_user_id: UUID | None = None
 ) -> EvidenceTestGraph:
+    if owner_user_id is None:
+        owner = User(
+            email=f"resource-owner-{uuid4()}@example.com",
+            display_name="Resource Owner",
+        )
+        session.add(owner)
+        session.flush()
+        owner_user_id = owner.id
     decision = Decision(
+        owner_user_id=owner_user_id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
     )
@@ -49,15 +59,8 @@ def create_evidence_test_graph(
     session.add(alternative)
     session.flush()
 
-    document_owner = User(
-        email=f"document-owner-{uuid4()}@example.com",
-        display_name="Document Owner",
-    )
-    session.add(document_owner)
-    session.flush()
-
     document = Document(
-        owner_user_id=document_owner.id,
+        owner_user_id=owner_user_id,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",
@@ -255,11 +258,13 @@ def test_repository_creates_and_lists_evidence_with_citation(
 
 
 def test_adds_and_lists_decision_evidence_with_citation(
-    client,
     db_session: Session,
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     graph = create_evidence_test_graph(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     relevance_note = (
         "The source directly describes the safety benefit of this alternative."
@@ -268,7 +273,7 @@ def test_adds_and_lists_decision_evidence_with_citation(
         f"/decisions/{graph.decision.id}/alternatives/{graph.alternative.id}/evidence"
     )
 
-    create_response = client.post(
+    create_response = authenticated_client.post(
         evidence_url,
         json={
             "document_chunk_id": str(
@@ -313,7 +318,7 @@ def test_adds_and_lists_decision_evidence_with_citation(
         "page_number": 4,
     }
 
-    list_response = client.get(
+    list_response = authenticated_client.get(
         evidence_url,
     )
 
@@ -324,7 +329,7 @@ def test_adds_and_lists_decision_evidence_with_citation(
 
 
 def test_rejects_duplicate_decision_evidence_link(
-    client,
+    authenticated_client,
     db_session: Session,
 ) -> None:
     graph = create_evidence_test_graph(
@@ -341,14 +346,14 @@ def test_rejects_duplicate_decision_evidence_link(
         "relevance_note": ("This source supports the proposed alternative."),
     }
 
-    first_response = client.post(
+    first_response = authenticated_client.post(
         evidence_url,
         json=payload,
     )
 
     assert first_response.status_code == 201
 
-    duplicate_response = client.post(
+    duplicate_response = authenticated_client.post(
         evidence_url,
         json={
             **payload,
@@ -372,7 +377,7 @@ def test_rejects_duplicate_decision_evidence_link(
     ],
 )
 def test_rejects_evidence_from_document_that_is_not_ready(
-    client,
+    authenticated_client,
     db_session: Session,
     document_status: str,
 ) -> None:
@@ -382,7 +387,7 @@ def test_rejects_evidence_from_document_that_is_not_ready(
     graph.document.status = document_status
     db_session.flush()
 
-    response = client.post(
+    response = authenticated_client.post(
         (
             f"/decisions/{graph.decision.id}"
             f"/alternatives/{graph.alternative.id}"
@@ -404,17 +409,18 @@ def test_rejects_evidence_from_document_that_is_not_ready(
 
 
 def test_removes_decision_evidence_without_deleting_source(
-    client,
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
 ) -> None:
     graph = create_evidence_test_graph(
-        db_session,
+        db_session, owner_user_id=authenticated_user.user.id
     )
     evidence_url = (
         f"/decisions/{graph.decision.id}/alternatives/{graph.alternative.id}/evidence"
     )
 
-    create_response = client.post(
+    create_response = authenticated_client.post(
         evidence_url,
         json={
             "document_chunk_id": str(
@@ -429,14 +435,14 @@ def test_removes_decision_evidence_without_deleting_source(
 
     created_evidence = create_response.json()
 
-    delete_response = client.delete(
+    delete_response = authenticated_client.delete(
         (f"{evidence_url}/{created_evidence['id']}"),
     )
 
     assert delete_response.status_code == 204
     assert delete_response.content == b""
 
-    list_response = client.get(
+    list_response = authenticated_client.get(
         evidence_url,
     )
 
@@ -472,7 +478,7 @@ def test_removes_decision_evidence_without_deleting_source(
     ],
 )
 def test_rejects_invalid_decision_evidence_request(
-    client,
+    authenticated_client,
     db_session: Session,
     payload: dict[str, object],
 ) -> None:
@@ -480,7 +486,7 @@ def test_rejects_invalid_decision_evidence_request(
         db_session,
     )
 
-    response = client.post(
+    response = authenticated_client.post(
         (
             f"/decisions/{graph.decision.id}"
             f"/alternatives/{graph.alternative.id}"
@@ -493,14 +499,14 @@ def test_rejects_invalid_decision_evidence_request(
 
 
 def test_rejects_unknown_document_chunk_as_evidence(
-    client,
+    authenticated_client,
     db_session: Session,
 ) -> None:
     graph = create_evidence_test_graph(
         db_session,
     )
 
-    response = client.post(
+    response = authenticated_client.post(
         (
             f"/decisions/{graph.decision.id}"
             f"/alternatives/{graph.alternative.id}"
@@ -521,11 +527,13 @@ def test_rejects_unknown_document_chunk_as_evidence(
 
 
 def test_cannot_delete_evidence_through_another_alternative(
-    client,
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
 ) -> None:
     graph = create_evidence_test_graph(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
 
     other_alternative = DecisionAlternative(
@@ -540,7 +548,7 @@ def test_cannot_delete_evidence_through_another_alternative(
     evidence_url = (
         f"/decisions/{graph.decision.id}/alternatives/{graph.alternative.id}/evidence"
     )
-    create_response = client.post(
+    create_response = authenticated_client.post(
         evidence_url,
         json={
             "document_chunk_id": str(
@@ -554,7 +562,7 @@ def test_cannot_delete_evidence_through_another_alternative(
 
     evidence = create_response.json()
 
-    response = client.delete(
+    response = authenticated_client.delete(
         (
             f"/decisions/{graph.decision.id}"
             f"/alternatives/{other_alternative.id}"
@@ -567,7 +575,7 @@ def test_cannot_delete_evidence_through_another_alternative(
         "detail": "Decision evidence not found",
     }
 
-    list_response = client.get(
+    list_response = authenticated_client.get(
         evidence_url,
     )
 

@@ -29,10 +29,10 @@ def get_decision_record(
     session: Session,
     *,
     decision_id: UUID,
+    owner_user_id: UUID,
 ) -> DecisionRecord | None:
     decision = decision_repository.get_decision_by_id(
-        session,
-        decision_id,
+        session, decision_id, owner_user_id=owner_user_id
     )
 
     if decision is None:
