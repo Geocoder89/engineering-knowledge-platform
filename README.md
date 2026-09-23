@@ -4,7 +4,7 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, and authenticated document ownership are implemented. Decision ownership, identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, and core decision ownership/read authorization are implemented. Nested decision mutation and review-transition authorization, identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
 
 ## Why This Project Exists
 
@@ -80,6 +80,14 @@ This platform creates a structured decision record that connects each outcome to
 - Owner-scoped document retrieval, pagination, filtering, and counts
 - Cross-owner access handled as `404 Not Found` to avoid revealing resource existence
 - Explicit trusted-worker lookup kept separate from browser-facing owner-scoped access
+
+### Decision authorization
+
+- Authentication required for decision creation, listing, retrieval, assembled records, alternative and evidence reads, and audit-history reads
+- Decision ownership derived from the authenticated user rather than request data
+- Owner-scoped decision retrieval, pagination, counts, assembled records, and related read endpoints
+- Cross-owner access handled as `404 Not Found` to avoid revealing decision existence
+- Authorization for nested mutations and review transitions remains planned
 
 ## Decision Lifecycle
 
@@ -441,8 +449,9 @@ tests/               Unit, integration, API, and worker tests
 ### Resource authorization — in progress
 
 - Document ownership and authorization — implemented
-- Decision ownership and authorization — planned
-- Search, evidence, and audit-history scoping — planned
+- Core decision ownership and read authorization — implemented
+- Nested decision mutation and review-transition authorization — planned
+- Document search and cross-resource evidence scoping — planned
 - Creator and reviewer attribution — planned
 - Actor identity in decision audit events — planned
 - Additional abuse protection and authentication hardening — planned
@@ -473,7 +482,7 @@ This repository is under active development and is not yet presented as a produc
 
 Current limitations include:
 
-- Authentication is implemented, but resource-level authorization and ownership rules are not yet enforced across document and decision workflows
+- Document and core decision ownership are enforced, but nested decision mutations, review transitions, document search, and cross-resource evidence authorization remain incomplete
 - Creator/reviewer attribution and authenticated actor identity are not yet wired into decision records and audit events
 - Local filesystem document storage
 - No hosted deployment configuration

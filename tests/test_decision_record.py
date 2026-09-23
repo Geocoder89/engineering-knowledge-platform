@@ -68,9 +68,9 @@ def create_record_source_chunk(
 
 
 def test_gets_assembled_draft_decision_record(
-    client,
+    authenticated_client,
 ) -> None:
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -83,7 +83,7 @@ def test_gets_assembled_draft_decision_record(
     created_decision = create_response.json()
     decision_id = created_decision["id"]
 
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{decision_id}/record",
     )
 
@@ -106,10 +106,10 @@ def test_gets_assembled_draft_decision_record(
 
 
 def test_gets_complete_assembled_decision_record(
-    client,
+    authenticated_client,
     db_session: Session,
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -122,7 +122,7 @@ def test_gets_complete_assembled_decision_record(
     decision = decision_response.json()
     alternatives_url = f"/decisions/{decision['id']}/alternatives"
 
-    first_alternative_response = client.post(
+    first_alternative_response = authenticated_client.post(
         alternatives_url,
         json={
             "title": "Keep the existing pressure limit",
@@ -131,7 +131,7 @@ def test_gets_complete_assembled_decision_record(
             ),
         },
     )
-    second_alternative_response = client.post(
+    second_alternative_response = authenticated_client.post(
         alternatives_url,
         json={
             "title": "Reduce the pressure limit",
@@ -150,7 +150,7 @@ def test_gets_complete_assembled_decision_record(
         db_session,
     )
 
-    evidence_response = client.post(
+    evidence_response = authenticated_client.post(
         (f"{alternatives_url}/{second_alternative['id']}/evidence"),
         json={
             "document_chunk_id": str(document_chunk.id),
@@ -165,7 +165,7 @@ def test_gets_complete_assembled_decision_record(
 
     evidence = evidence_response.json()
 
-    submit_response = client.post(
+    submit_response = authenticated_client.post(
         f"/decisions/{decision['id']}/submit",
     )
 
@@ -175,7 +175,7 @@ def test_gets_complete_assembled_decision_record(
         "Reducing the pressure limit provides the strongest "
         "documented safety improvement."
     )
-    decide_response = client.post(
+    decide_response = authenticated_client.post(
         f"/decisions/{decision['id']}/decide",
         json={
             "selected_alternative_id": second_alternative["id"],
@@ -185,7 +185,7 @@ def test_gets_complete_assembled_decision_record(
 
     assert decide_response.status_code == 200
 
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{decision['id']}/record",
     )
 
@@ -223,11 +223,13 @@ def test_gets_complete_assembled_decision_record(
 def test_service_assembles_record_with_fixed_repository_queries(
     monkeypatch,
 ) -> None:
+    owner_user_id = uuid4()
     session = Mock(
         spec=Session,
     )
     decision = Decision(
         id=uuid4(),
+        owner_user_id=owner_user_id,
         title="Cooling pressure limit",
         question=("Should the maximum cooling-system pressure be reduced?"),
         status="decided",
@@ -292,6 +294,7 @@ def test_service_assembles_record_with_fixed_repository_queries(
     record = decision_record_service.get_decision_record(
         session,
         decision_id=decision.id,
+        owner_user_id=owner_user_id,
     )
 
     assert record is not None
@@ -308,6 +311,7 @@ def test_service_assembles_record_with_fixed_repository_queries(
     get_decision.assert_called_once_with(
         session,
         decision.id,
+        owner_user_id=owner_user_id,
     )
     list_alternatives.assert_called_once_with(
         session,
@@ -324,11 +328,11 @@ def test_service_assembles_record_with_fixed_repository_queries(
 
 
 def test_returns_404_for_unknown_decision_record(
-    client,
+    authenticated_client,
 ) -> None:
     unknown_id = uuid4()
 
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{unknown_id}/record",
     )
 
@@ -339,9 +343,9 @@ def test_returns_404_for_unknown_decision_record(
 
 
 def test_rejects_malformed_decision_record_id(
-    client,
+    authenticated_client,
 ) -> None:
-    response = client.get(
+    response = authenticated_client.get(
         "/decisions/not-a-valid-uuid/record",
     )
 

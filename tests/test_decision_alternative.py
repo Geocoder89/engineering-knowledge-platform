@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import engine
 from app.models.decision import Decision
 from app.models.decision_alternative import DecisionAlternative
+from app.models.user import User
 from app.repositories import (
     decision_alternative as decision_alternative_repository,
 )
@@ -23,7 +24,14 @@ def test_database_persists_decision_alternative() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
+            owner = User(
+                email="owner@example.com",
+                display_name="Decision Owner",
+            )
+            session.add(owner)
+            session.flush()
             decision = Decision(
+                owner_user_id=owner.id,
                 title="Cooling pressure limit",
                 question=("Should the maximum cooling-system pressure be reduced?"),
             )
@@ -68,7 +76,14 @@ def test_repository_appends_and_lists_decision_alternatives() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
+            owner = User(
+                email="owner@example.com",
+                display_name="Decision Owner",
+            )
+            session.add(owner)
+            session.flush()
             decision = Decision(
+                owner_user_id=owner.id,
                 title="Cooling pressure limit",
                 question=("Should the maximum cooling-system pressure be reduced?"),
             )
@@ -112,8 +127,8 @@ def test_repository_appends_and_lists_decision_alternatives() -> None:
         connection.close()
 
 
-def test_adds_alternative_to_decision(client) -> None:
-    decision_response = client.post(
+def test_adds_alternative_to_decision(authenticated_client) -> None:
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -131,7 +146,7 @@ def test_adds_alternative_to_decision(client) -> None:
         ),
     }
 
-    response = client.post(
+    response = authenticated_client.post(
         (f"/decisions/{decision['id']}/alternatives"),
         json=payload,
     )
@@ -160,9 +175,9 @@ def test_adds_alternative_to_decision(client) -> None:
 
 
 def test_lists_decision_alternatives_in_position_order(
-    client,
+    authenticated_client,
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -187,7 +202,7 @@ def test_lists_decision_alternatives_in_position_order(
             ),
         },
     ):
-        response = client.post(
+        response = authenticated_client.post(
             (f"/decisions/{decision['id']}/alternatives"),
             json=payload,
         )
@@ -197,7 +212,7 @@ def test_lists_decision_alternatives_in_position_order(
             response.json(),
         )
 
-    response = client.get(
+    response = authenticated_client.get(
         (f"/decisions/{decision['id']}/alternatives"),
     )
 
@@ -211,8 +226,8 @@ def test_lists_decision_alternatives_in_position_order(
     assert [alternative["position"] for alternative in alternatives] == [0, 1]
 
 
-def test_updates_decision_alternative(client) -> None:
-    decision_response = client.post(
+def test_updates_decision_alternative(authenticated_client) -> None:
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -224,7 +239,7 @@ def test_updates_decision_alternative(client) -> None:
 
     decision = decision_response.json()
 
-    create_response = client.post(
+    create_response = authenticated_client.post(
         (f"/decisions/{decision['id']}/alternatives"),
         json={
             "title": "Reduce the pressure limit",
@@ -238,7 +253,7 @@ def test_updates_decision_alternative(client) -> None:
 
     created_alternative = create_response.json()
 
-    response = client.patch(
+    response = authenticated_client.patch(
         (f"/decisions/{decision['id']}/alternatives/{created_alternative['id']}"),
         json={
             "title": ("Reduce the maximum operating pressure"),
@@ -256,9 +271,9 @@ def test_updates_decision_alternative(client) -> None:
 
 
 def test_deletes_and_compacts_alternative_positions(
-    client,
+    authenticated_client,
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -276,7 +291,7 @@ def test_deletes_and_compacts_alternative_positions(
         "Reduce the pressure limit",
         "Replace the pressure system",
     ):
-        response = client.post(
+        response = authenticated_client.post(
             (f"/decisions/{decision['id']}/alternatives"),
             json={
                 "title": title,
@@ -293,14 +308,14 @@ def test_deletes_and_compacts_alternative_positions(
 
     removed_alternative = created_alternatives[1]
 
-    delete_response = client.delete(
+    delete_response = authenticated_client.delete(
         (f"/decisions/{decision['id']}/alternatives/{removed_alternative['id']}"),
     )
 
     assert delete_response.status_code == 204
     assert delete_response.content == b""
 
-    list_response = client.get(
+    list_response = authenticated_client.get(
         (f"/decisions/{decision['id']}/alternatives"),
     )
 
@@ -334,10 +349,10 @@ def test_deletes_and_compacts_alternative_positions(
     ],
 )
 def test_rejects_invalid_decision_alternative_creation(
-    client,
+    authenticated_client,
     payload: dict[str, object],
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -349,7 +364,7 @@ def test_rejects_invalid_decision_alternative_creation(
 
     decision = decision_response.json()
 
-    response = client.post(
+    response = authenticated_client.post(
         f"/decisions/{decision['id']}/alternatives",
         json=payload,
     )
@@ -373,10 +388,10 @@ def test_rejects_invalid_decision_alternative_creation(
     ],
 )
 def test_rejects_invalid_decision_alternative_update(
-    client,
+    authenticated_client,
     payload: dict[str, object],
 ) -> None:
-    decision_response = client.post(
+    decision_response = authenticated_client.post(
         "/decisions",
         json={
             "title": "Cooling pressure limit",
@@ -388,7 +403,7 @@ def test_rejects_invalid_decision_alternative_update(
 
     decision = decision_response.json()
 
-    alternative_response = client.post(
+    alternative_response = authenticated_client.post(
         f"/decisions/{decision['id']}/alternatives",
         json={
             "title": "Keep the existing limit",
@@ -400,7 +415,7 @@ def test_rejects_invalid_decision_alternative_update(
 
     alternative = alternative_response.json()
 
-    response = client.patch(
+    response = authenticated_client.patch(
         (f"/decisions/{decision['id']}/alternatives/{alternative['id']}"),
         json=payload,
     )
@@ -416,7 +431,7 @@ def test_rejects_invalid_decision_alternative_update(
     ],
 )
 def test_cannot_modify_alternative_through_another_decision(
-    client,
+    authenticated_client,
     method: str,
 ) -> None:
     decisions = []
@@ -425,7 +440,7 @@ def test_cannot_modify_alternative_through_another_decision(
         "Cooling pressure limit",
         "Electrical cable selection",
     ):
-        response = client.post(
+        response = authenticated_client.post(
             "/decisions",
             json={
                 "title": title,
@@ -436,7 +451,7 @@ def test_cannot_modify_alternative_through_another_decision(
         assert response.status_code == 201
         decisions.append(response.json())
 
-    alternative_response = client.post(
+    alternative_response = authenticated_client.post(
         f"/decisions/{decisions[0]['id']}/alternatives",
         json={
             "title": "Keep the existing design",
@@ -450,14 +465,14 @@ def test_cannot_modify_alternative_through_another_decision(
     url = f"/decisions/{decisions[1]['id']}/alternatives/{alternative['id']}"
 
     if method == "patch":
-        response = client.patch(
+        response = authenticated_client.patch(
             url,
             json={
                 "title": "Changed through another decision",
             },
         )
     else:
-        response = client.delete(url)
+        response = authenticated_client.delete(url)
 
     assert response.status_code == 404
     assert response.json() == {

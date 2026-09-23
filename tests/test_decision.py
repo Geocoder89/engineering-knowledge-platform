@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import engine
 from app.models.decision import Decision
+from app.models.user import User
 from app.repositories import decision as decision_repository
 
 
@@ -20,13 +21,20 @@ def test_database_persists_draft_decision() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
+            owner = User(
+                email="owner@example.com",
+                display_name="Decision Owner",
+            )
+            session.add(owner)
+            session.flush()
             decision = Decision(
+                owner_user_id=owner.id,
                 title="Cooling pressure limit",
                 question=("Should the maximum cooling-system pressure be reduced?"),
             )
             session.add(decision)
             session.flush()
-
+            owner_id = owner.id
             decision_id = decision.id
             session.expunge_all()
 
@@ -34,7 +42,7 @@ def test_database_persists_draft_decision() -> None:
                 Decision,
                 decision_id,
             )
-
+            assert persisted_decision.owner_user_id == owner_id
             assert persisted_decision is not None
             assert persisted_decision.id == decision_id
             assert persisted_decision.title == "Cooling pressure limit"
@@ -51,7 +59,7 @@ def test_database_persists_draft_decision() -> None:
         connection.close()
 
 
-def test_repository_creates_and_retrieves_decision() -> None:
+def test_repository_creates_and_retrieves_decision_for_owner() -> None:
     connection = engine.connect()
     outer_transaction = connection.begin()
 
@@ -62,8 +70,28 @@ def test_repository_creates_and_retrieves_decision() -> None:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as session:
+            owner = User(
+                email="owner@example.com",
+                display_name="Decision Owner",
+            )
+            other_user = User(
+                email="other@example.com",
+                display_name="Other User",
+            )
+            session.add_all(
+                [
+                    owner,
+                    other_user,
+                ],
+            )
+            session.flush()
+
+            owner_id = owner.id
+            other_user_id = other_user.id
+
             created_decision = decision_repository.create_decision(
                 session,
+                owner_user_id=owner_id,
                 title="Cooling pressure limit",
                 question=("Should the maximum cooling-system pressure be reduced?"),
             )
@@ -74,15 +102,25 @@ def test_repository_creates_and_retrieves_decision() -> None:
             retrieved_decision = decision_repository.get_decision_by_id(
                 session,
                 decision_id,
+                owner_user_id=owner_id,
             )
 
             assert retrieved_decision is not None
             assert retrieved_decision.id == decision_id
+            assert retrieved_decision.owner_user_id == owner_id
             assert retrieved_decision.title == "Cooling pressure limit"
             assert retrieved_decision.question == (
                 "Should the maximum cooling-system pressure be reduced?"
             )
             assert retrieved_decision.status == "draft"
+
+            other_users_result = decision_repository.get_decision_by_id(
+                session,
+                decision_id,
+                owner_user_id=other_user_id,
+            )
+
+            assert other_users_result is None
     finally:
         if outer_transaction.is_active:
             outer_transaction.rollback()
@@ -90,13 +128,13 @@ def test_repository_creates_and_retrieves_decision() -> None:
         connection.close()
 
 
-def test_creates_draft_decision(client) -> None:
+def test_creates_draft_decision(authenticated_client) -> None:
     payload = {
         "title": "Cooling pressure limit",
         "question": ("Should the maximum cooling-system pressure be reduced?"),
     }
 
-    response = client.post(
+    response = authenticated_client.post(
         "/decisions",
         json=payload,
     )
@@ -114,13 +152,13 @@ def test_creates_draft_decision(client) -> None:
     UUID(body["id"])
 
 
-def test_retrieves_created_decision(client) -> None:
+def test_retrieves_created_decision(authenticated_client) -> None:
     payload = {
         "title": "Cooling pressure limit",
         "question": ("Should the maximum cooling-system pressure be reduced?"),
     }
 
-    create_response = client.post(
+    create_response = authenticated_client.post(
         "/decisions",
         json=payload,
     )
@@ -129,7 +167,7 @@ def test_retrieves_created_decision(client) -> None:
 
     created_decision = create_response.json()
 
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{created_decision['id']}",
     )
 
@@ -137,10 +175,10 @@ def test_retrieves_created_decision(client) -> None:
     assert response.json() == created_decision
 
 
-def test_returns_404_for_unknown_decision(client) -> None:
+def test_returns_404_for_unknown_decision(authenticated_client) -> None:
     unknown_id = uuid4()
 
-    response = client.get(
+    response = authenticated_client.get(
         f"/decisions/{unknown_id}",
     )
 
@@ -150,15 +188,15 @@ def test_returns_404_for_unknown_decision(client) -> None:
     }
 
 
-def test_rejects_malformed_decision_id(client) -> None:
-    response = client.get(
+def test_rejects_malformed_decision_id(authenticated_client) -> None:
+    response = authenticated_client.get(
         "/decisions/not-a-valid-uuid",
     )
 
     assert response.status_code == 422
 
 
-def test_lists_decisions_with_pagination(client) -> None:
+def test_lists_decisions_with_pagination(authenticated_client) -> None:
     payloads = [
         {
             "title": "Cooling pressure limit",
@@ -181,7 +219,7 @@ def test_lists_decisions_with_pagination(client) -> None:
     created_ids = set()
 
     for payload in payloads:
-        response = client.post(
+        response = authenticated_client.post(
             "/decisions",
             json=payload,
         )
@@ -189,7 +227,7 @@ def test_lists_decisions_with_pagination(client) -> None:
         assert response.status_code == 201
         created_ids.add(response.json()["id"])
 
-    first_response = client.get(
+    first_response = authenticated_client.get(
         "/decisions?offset=0&limit=2",
     )
 
@@ -202,7 +240,7 @@ def test_lists_decisions_with_pagination(client) -> None:
     assert first_page["limit"] == 2
     assert len(first_page["items"]) == 2
 
-    second_response = client.get(
+    second_response = authenticated_client.get(
         "/decisions?offset=2&limit=2",
     )
 
@@ -241,10 +279,10 @@ def test_lists_decisions_with_pagination(client) -> None:
     ],
 )
 def test_rejects_invalid_decision_creation(
-    client,
+    authenticated_client,
     payload: dict[str, str],
 ) -> None:
-    response = client.post(
+    response = authenticated_client.post(
         "/decisions",
         json=payload,
     )
@@ -252,9 +290,114 @@ def test_rejects_invalid_decision_creation(
     assert response.status_code == 422
 
 
-def test_rejects_invalid_decision_pagination(client) -> None:
-    response = client.get(
+def test_rejects_invalid_decision_pagination(authenticated_client) -> None:
+    response = authenticated_client.get(
         "/decisions?offset=-1&limit=0",
     )
 
     assert response.status_code == 422
+
+
+def test_repository_lists_and_counts_only_decisions_owned_by_user() -> None:
+    connection = engine.connect()
+    outer_transaction = connection.begin()
+
+    try:
+        with Session(
+            bind=connection,
+            autoflush=False,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        ) as session:
+            owner = User(
+                email="owner@example.com",
+                display_name="Decision Owner",
+            )
+            other_user = User(
+                email="other@example.com",
+                display_name="Other User",
+            )
+            session.add_all(
+                [
+                    owner,
+                    other_user,
+                ],
+            )
+            session.flush()
+
+            owner_first_decision = decision_repository.create_decision(
+                session,
+                owner_user_id=owner.id,
+                title="Owner first decision",
+                question="What should the owner choose first?",
+            )
+            decision_repository.create_decision(
+                session,
+                owner_user_id=other_user.id,
+                title="Other user's decision",
+                question="What should the other user choose?",
+            )
+            owner_second_decision = decision_repository.create_decision(
+                session,
+                owner_user_id=owner.id,
+                title="Owner second decision",
+                question="What should the owner choose second?",
+            )
+
+            owner_decisions = decision_repository.list_decisions(
+                session,
+                owner_user_id=owner.id,
+                offset=0,
+                limit=10,
+            )
+            owner_count = decision_repository.count_decisions(
+                session,
+                owner_user_id=owner.id,
+            )
+
+            other_user_decisions = decision_repository.list_decisions(
+                session,
+                owner_user_id=other_user.id,
+                offset=0,
+                limit=10,
+            )
+            other_user_count = decision_repository.count_decisions(
+                session,
+                owner_user_id=other_user.id,
+            )
+
+            assert {decision.id for decision in owner_decisions} == {
+                owner_first_decision.id,
+                owner_second_decision.id,
+            }
+            assert owner_count == 2
+
+            assert len(other_user_decisions) == 1
+            assert other_user_decisions[0].owner_user_id == other_user.id
+            assert other_user_count == 1
+
+            first_owner_page = decision_repository.list_decisions(
+                session,
+                owner_user_id=owner.id,
+                offset=0,
+                limit=1,
+            )
+            second_owner_page = decision_repository.list_decisions(
+                session,
+                owner_user_id=owner.id,
+                offset=1,
+                limit=1,
+            )
+
+            assert {
+                first_owner_page[0].id,
+                second_owner_page[0].id,
+            } == {
+                owner_first_decision.id,
+                owner_second_decision.id,
+            }
+    finally:
+        if outer_transaction.is_active:
+            outer_transaction.rollback()
+
+        connection.close()

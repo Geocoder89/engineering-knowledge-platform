@@ -29,6 +29,16 @@ class Decision(Base):
         primary_key=True,
         default=uuid4,
     )
+
+    owner_user_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "users.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(
         String(200),
         nullable=False,

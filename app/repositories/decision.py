@@ -11,10 +11,11 @@ from app.models.decision import Decision
 def create_decision(
     session: Session,
     *,
+    owner_user_id: UUID,
     title: str,
     question: str,
 ) -> Decision:
-    decision = Decision(title=title, question=question)
+    decision = Decision(owner_user_id=owner_user_id, title=title, question=question)
     session.add(decision)
     session.flush()
     return decision
@@ -23,11 +24,15 @@ def create_decision(
 def list_decisions(
     session: Session,
     *,
+    owner_user_id: UUID,
     offset: int,
     limit: int,
 ) -> list[Decision]:
     statement = (
         select(Decision)
+        .where(
+            Decision.owner_user_id == owner_user_id,
+        )
         .order_by(
             Decision.created_at.desc(),
             Decision.id.desc(),
@@ -43,17 +48,29 @@ def list_decisions(
 
 def count_decisions(
     session: Session,
+    *,
+    owner_user_id: UUID,
 ) -> int:
-    statement = select(func.count()).select_from(Decision)
+    statement = (
+        select(func.count())
+        .select_from(Decision)
+        .where(
+            Decision.owner_user_id == owner_user_id,
+        )
+    )
 
     return session.scalar(statement) or 0
 
 
 def get_decision_by_id(
-    session: Session,
-    decision_id: UUID,
+    session: Session, decision_id: UUID, *, owner_user_id: UUID
 ) -> Decision | None:
-    return session.get(Decision, decision_id)
+    return session.scalar(
+        select(Decision).where(
+            Decision.id == decision_id,
+            Decision.owner_user_id == owner_user_id,
+        ),
+    )
 
 
 def submit_decision_for_review(
