@@ -2,7 +2,7 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -88,19 +88,22 @@ def persisted_document_factory() -> Callable[..., Document]:
     def create_persisted_document(
         session: Session,
         *,
+        owner_user_id: UUID | None = None,
         title: str = "Cooling system",
         file_name: str = "cooling-design.pdf",
         status: str = "pending",
     ) -> Document:
-        owner = User(
-            email=f"document-owner-{uuid4()}@example.com",
-            display_name="Document Owner",
-        )
-        session.add(owner)
-        session.flush()
+        if owner_user_id is None:
+            owner = User(
+                email=f"document-owner-{uuid4()}@example.com",
+                display_name="Document Owner",
+            )
+            session.add(owner)
+            session.flush()
+            owner_user_id = owner.id
 
         document = Document(
-            owner_user_id=owner.id,
+            owner_user_id=owner_user_id,
             title=title,
             file_name=file_name,
             status=status,

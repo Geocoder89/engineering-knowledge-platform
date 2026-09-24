@@ -49,6 +49,7 @@ def replace_document_chunks(
 def search_document_chunks(
     session: Session,
     *,
+    owner_user_id: UUID,
     query_embedding: EmbeddingVector,
     limit: int,
 ) -> list[DocumentChunkSearchResult]:
@@ -85,6 +86,7 @@ def search_document_chunks(
             Document.id == DocumentVersion.document_id,
         )
         .where(
+            Document.owner_user_id == owner_user_id,
             DocumentChunk.embedding.is_not(None),
             Document.status == DocumentStatus.READY,
         )

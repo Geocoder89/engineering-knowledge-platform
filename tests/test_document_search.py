@@ -1,4 +1,5 @@
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -106,6 +107,7 @@ def test_repository_ranks_document_chunks_by_cosine_distance(
 
             matches = document_chunk_repository.search_document_chunks(
                 session,
+                owner_user_id=document.owner_user_id,
                 query_embedding=tuple(exact_chunk.embedding),
                 limit=2,
             )
@@ -131,6 +133,7 @@ def test_repository_ranks_document_chunks_by_cosine_distance(
             # An unembedded chunk must not appear in semantic search.
             all_searchable_matches = document_chunk_repository.search_document_chunks(
                 session,
+                owner_user_id=document.owner_user_id,
                 query_embedding=tuple(exact_chunk.embedding),
                 limit=10,
             )
@@ -148,6 +151,7 @@ def test_repository_ranks_document_chunks_by_cosine_distance(
             assert (
                 document_chunk_repository.search_document_chunks(
                     session,
+                    owner_user_id=document.owner_user_id,
                     query_embedding=tuple(exact_chunk.embedding),
                     limit=10,
                 )
@@ -165,7 +169,7 @@ def test_service_embeds_query_and_returns_document_matches(
 ) -> None:
     session = Mock(spec=Session)
     embedding_provider = Mock(spec=EmbeddingProvider)
-
+    owner_user_id = uuid4()
     query_embedding = tuple([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1))
     embedding_provider.embed_texts.return_value = (query_embedding,)
 
@@ -181,6 +185,7 @@ def test_service_embeds_query_and_returns_document_matches(
 
     matches = document_search_service.search_documents(
         session,
+        owner_user_id=owner_user_id,
         embedding_provider=embedding_provider,
         query="cooling requirements",
         limit=5,
@@ -189,6 +194,7 @@ def test_service_embeds_query_and_returns_document_matches(
     embedding_provider.embed_texts.assert_called_once_with(("cooling requirements",))
     search_document_chunks.assert_called_once_with(
         session,
+        owner_user_id=owner_user_id,
         query_embedding=query_embedding,
         limit=5,
     )
@@ -233,6 +239,7 @@ def test_service_rejects_invalid_query_embedding_response(
     ):
         document_search_service.search_documents(
             session,
+            owner_user_id=uuid4(),
             embedding_provider=embedding_provider,
             query="cooling requirements",
             limit=5,
@@ -240,3 +247,85 @@ def test_service_rejects_invalid_query_embedding_response(
 
     embedding_provider.embed_texts.assert_called_once_with(("cooling requirements",))
     search_document_chunks.assert_not_called()
+
+
+def test_repository_searches_only_document_chunks_owned_by_user(
+    db_session: Session,
+    persisted_document_factory,
+) -> None:
+    owner_document = persisted_document_factory(
+        db_session,
+        title="Owner cooling system",
+        file_name="owner-cooling.pdf",
+        status="ready",
+    )
+    other_users_document = persisted_document_factory(
+        db_session,
+        title="Other user's cooling system",
+        file_name="other-cooling.pdf",
+        status="ready",
+    )
+
+    def create_embedded_chunk(
+        document,
+        *,
+        checksum_character: str,
+    ) -> DocumentChunk:
+        document_version = DocumentVersion(
+            document_id=document.id,
+            version_number=1,
+            file_name=document.file_name,
+            content_type="application/pdf",
+            size_bytes=100,
+            checksum_sha256=checksum_character * 64,
+            storage_key=f"{document.id}/version-1",
+        )
+        db_session.add(document_version)
+        db_session.flush()
+
+        document_page = DocumentPage(
+            document_version_id=document_version.id,
+            page_number=1,
+            text="Cooling pressure requirements",
+        )
+        db_session.add(document_page)
+        db_session.flush()
+
+        chunk_text = "Cooling pressure requirements"
+        document_chunk = DocumentChunk(
+            document_page_id=document_page.id,
+            chunk_index=0,
+            text=chunk_text,
+            start_offset=0,
+            end_offset=len(chunk_text),
+            embedding=[1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1),
+        )
+        db_session.add(document_chunk)
+        db_session.flush()
+
+        return document_chunk
+
+    owner_chunk = create_embedded_chunk(
+        owner_document,
+        checksum_character="a",
+    )
+    create_embedded_chunk(
+        other_users_document,
+        checksum_character="b",
+    )
+
+    query_embedding = tuple([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1))
+
+    matches = document_chunk_repository.search_document_chunks(
+        db_session,
+        owner_user_id=owner_document.owner_user_id,
+        query_embedding=query_embedding,
+        limit=10,
+    )
+
+    assert [match.document_chunk_id for match in matches] == [
+        owner_chunk.id,
+    ]
+    assert [match.document_id for match in matches] == [
+        owner_document.id,
+    ]

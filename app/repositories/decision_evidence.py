@@ -18,6 +18,7 @@ from app.models.document_version import DocumentVersion
 def get_document_chunk_source_status(
     session: Session,
     *,
+    owner_user_id: UUID,
     document_chunk_id: UUID,
 ) -> DocumentStatus | None:
     statement = (
@@ -39,6 +40,7 @@ def get_document_chunk_source_status(
         )
         .where(
             DocumentChunk.id == document_chunk_id,
+            Document.owner_user_id == owner_user_id,
         )
     )
 

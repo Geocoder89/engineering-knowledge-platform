@@ -35,15 +35,20 @@ class AuditSourceGraph:
 
 def create_audit_source_graph(
     session: Session,
+    *,
+    owner_user_id: UUID | None = None,
 ) -> AuditSourceGraph:
-    document_owner = User(
-        email=f"document-owner-{uuid4()}@example.com",
-        display_name="Document Owner",
-    )
-    session.add(document_owner)
-    session.flush()
+    if owner_user_id is None:
+        document_owner = User(
+            email=f"document-owner-{uuid4()}@example.com",
+            display_name="Document Owner",
+        )
+        session.add(document_owner)
+        session.flush()
+        owner_user_id = document_owner.id
+
     document = Document(
-        owner_user_id=document_owner.id,
+        owner_user_id=owner_user_id,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",
@@ -472,6 +477,7 @@ def test_records_decision_alternative_audit_history(
 
 def test_records_decision_evidence_audit_history(
     authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
 ) -> None:
     decision_response = authenticated_client.post(
@@ -501,6 +507,7 @@ def test_records_decision_evidence_audit_history(
     alternative = alternative_response.json()
     source = create_audit_source_graph(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     relevance_note = (
         "The source directly describes the safety benefit of this alternative."

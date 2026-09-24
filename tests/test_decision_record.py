@@ -1,5 +1,5 @@
 from unittest.mock import Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
@@ -11,19 +11,24 @@ from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
 from app.models.user import User
 from app.services import decision_record as decision_record_service
+from app.services.authentication import AuthenticatedUser
 
 
 def create_record_source_chunk(
     session: Session,
+    *,
+    owner_user_id: UUID | None = None,
 ) -> DocumentChunk:
-    document_owner = User(
-        email=f"document-owner-{uuid4()}@example.com",
-        display_name="Document Owner",
-    )
-    session.add(document_owner)
-    session.flush()
+    if owner_user_id is None:
+        document_owner = User(
+            email=f"document-owner-{uuid4()}@example.com",
+            display_name="Document Owner",
+        )
+        session.add(document_owner)
+        session.flush()
+        owner_user_id = document_owner.id
     document = Document(
-        owner_user_id=document_owner.id,
+        owner_user_id=owner_user_id,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",
@@ -107,6 +112,7 @@ def test_gets_assembled_draft_decision_record(
 
 def test_gets_complete_assembled_decision_record(
     authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
 ) -> None:
     decision_response = authenticated_client.post(
@@ -148,6 +154,7 @@ def test_gets_complete_assembled_decision_record(
     second_alternative = second_alternative_response.json()
     document_chunk = create_record_source_chunk(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
 
     evidence_response = authenticated_client.post(

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -647,3 +648,81 @@ def test_repository_lists_decision_evidence_for_decision(
     assert citations[0].document_version_id == graph.document_version.id
     assert citations[0].document_page_id == graph.document_page.id
     assert citations[0].document_chunk_id == graph.document_chunk.id
+
+
+def test_repository_scopes_document_chunk_source_status_to_owner(
+    db_session: Session,
+) -> None:
+    graph = create_evidence_test_graph(
+        db_session,
+    )
+
+    other_user = User(
+        email=f"other-resource-owner-{uuid4()}@example.com",
+        display_name="Other Resource Owner",
+    )
+    db_session.add(other_user)
+    db_session.flush()
+
+    owner_status = decision_evidence_repository.get_document_chunk_source_status(
+        db_session,
+        owner_user_id=graph.document.owner_user_id,
+        document_chunk_id=graph.document_chunk.id,
+    )
+    other_user_status = decision_evidence_repository.get_document_chunk_source_status(
+        db_session,
+        owner_user_id=other_user.id,
+        document_chunk_id=graph.document_chunk.id,
+    )
+
+    assert owner_status == graph.document.status
+    assert other_user_status is None
+
+
+def test_rejects_evidence_from_another_users_document(
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
+    db_session: Session,
+) -> None:
+    graph = create_evidence_test_graph(
+        db_session,
+        owner_user_id=authenticated_user.user.id,
+    )
+
+    other_user = User(
+        email=f"other-document-owner-{uuid4()}@example.com",
+        display_name="Other Document Owner",
+    )
+    db_session.add(other_user)
+    db_session.flush()
+
+    graph.document.owner_user_id = other_user.id
+    db_session.flush()
+
+    response = authenticated_client.post(
+        (
+            f"/decisions/{graph.decision.id}"
+            f"/alternatives/{graph.alternative.id}"
+            "/evidence"
+        ),
+        json={
+            "document_chunk_id": str(graph.document_chunk.id),
+            "evidence_type": "supporting",
+            "relevance_note": (
+                "This source belongs to another user and must not be linked."
+            ),
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "Document chunk not found",
+    }
+
+    persisted_evidence = db_session.scalar(
+        select(DecisionEvidence).where(
+            DecisionEvidence.decision_alternative_id == graph.alternative.id,
+        )
+    )
+
+    assert persisted_evidence is None

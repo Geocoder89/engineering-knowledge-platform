@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from app.domain.document_search import DocumentChunkSearchResult
@@ -12,6 +14,7 @@ from app.repositories import document_chunk as document_chunk_repository
 def search_documents(
     session: Session,
     *,
+    owner_user_id: UUID,
     embedding_provider: EmbeddingProvider,
     query: str,
     limit: int,
@@ -33,6 +36,7 @@ def search_documents(
 
     return document_chunk_repository.search_document_chunks(
         session,
+        owner_user_id=owner_user_id,
         query_embedding=query_embedding,
         limit=limit,
     )
