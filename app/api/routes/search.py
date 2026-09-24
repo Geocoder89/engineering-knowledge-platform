@@ -3,7 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import EmbeddingProviderDependency
+from app.api.dependencies import (
+    AuthenticatedUserDependency,
+    EmbeddingProviderDependency,
+)
 from app.database import get_session
 from app.embeddings.base import EmbeddingProviderError, InvalidEmbeddingResponseError
 from app.schemas.document_search import (
@@ -32,11 +35,13 @@ SessionDependency = Annotated[
 def search_documents_endpoint(
     search_request: DocumentSearchRequest,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
     embedding_provider: EmbeddingProviderDependency,
 ) -> DocumentSearchResponse:
     try:
         matches = document_search_service.search_documents(
             session,
+            owner_user_id=authenticated_user.user.id,
             embedding_provider=embedding_provider,
             query=search_request.query,
             limit=search_request.limit,

@@ -16,10 +16,12 @@ from app.models.document_chunk import DocumentChunk
 from app.models.document_page import DocumentPage
 from app.models.document_version import DocumentVersion
 from app.services import document_search as document_search_service
+from app.services.authentication import AuthenticatedUser
 
 
 def test_searches_documents_and_returns_source_citations(
-    client,
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
     monkeypatch,
 ) -> None:
     embedding_provider = Mock(spec=EmbeddingProvider)
@@ -50,7 +52,7 @@ def test_searches_documents_and_returns_source_citations(
     app.dependency_overrides[provide_embedding_provider] = lambda: embedding_provider
 
     try:
-        response = client.post(
+        response = authenticated_client.post(
             "/search",
             json={
                 "query": "cooling pressure limits",
@@ -91,6 +93,7 @@ def test_searches_documents_and_returns_source_citations(
 
     assert search_documents.call_count == 1
     assert search_documents.call_args.kwargs == {
+        "owner_user_id": authenticated_user.user.id,
         "embedding_provider": embedding_provider,
         "query": "cooling pressure limits",
         "limit": 5,
@@ -119,7 +122,7 @@ def test_searches_documents_and_returns_source_citations(
     ],
 )
 def test_maps_embedding_failures_to_http_errors(
-    client,
+    authenticated_client,
     monkeypatch,
     embedding_error: Exception,
     expected_status: int,
@@ -138,7 +141,7 @@ def test_maps_embedding_failures_to_http_errors(
     app.dependency_overrides[provide_embedding_provider] = lambda: embedding_provider
 
     try:
-        response = client.post(
+        response = authenticated_client.post(
             "/search",
             json={
                 "query": "cooling pressure limits",
@@ -175,7 +178,7 @@ def test_maps_embedding_failures_to_http_errors(
     ],
 )
 def test_rejects_invalid_document_search_requests(
-    client,
+    authenticated_client,
     monkeypatch,
     payload: dict[str, object],
 ) -> None:
@@ -190,7 +193,7 @@ def test_rejects_invalid_document_search_requests(
     app.dependency_overrides[provide_embedding_provider] = lambda: embedding_provider
 
     try:
-        response = client.post(
+        response = authenticated_client.post(
             "/search",
             json=payload,
         )
@@ -206,7 +209,8 @@ def test_rejects_invalid_document_search_requests(
 
 
 def test_searches_persisted_document_chunks_through_api(
-    client,
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session,
     persisted_document_factory,
 ) -> None:
@@ -216,6 +220,7 @@ def test_searches_persisted_document_chunks_through_api(
 
     document = persisted_document_factory(
         db_session,
+        owner_user_id=authenticated_user.user.id,
         title="Cooling system",
         file_name="cooling-design.pdf",
         status="ready",
@@ -271,7 +276,7 @@ def test_searches_persisted_document_chunks_through_api(
     app.dependency_overrides[provide_embedding_provider] = lambda: embedding_provider
 
     try:
-        response = client.post(
+        response = authenticated_client.post(
             "/search",
             json={
                 "query": "cooling pressure limits",
@@ -299,3 +304,20 @@ def test_searches_persisted_document_chunks_through_api(
     assert items[0]["citation"]["page_number"] == 3
 
     embedding_provider.embed_texts.assert_called_once_with(("cooling pressure limits",))
+
+
+def test_document_search_requires_authentication(
+    client,
+) -> None:
+    response = client.post(
+        "/search",
+        json={
+            "query": "cooling pressure limits",
+            "limit": 5,
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Authentication required",
+    }

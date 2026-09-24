@@ -511,6 +511,7 @@ def create_decision_evidence(
 
     document_status = decision_evidence_repository.get_document_chunk_source_status(
         session,
+        owner_user_id=authenticated_user.user.id,
         document_chunk_id=evidence.document_chunk_id,
     )
 
