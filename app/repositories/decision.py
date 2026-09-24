@@ -95,11 +95,14 @@ def submit_decision_for_review(
 def get_decision_by_id_for_update(
     session: Session,
     decision_id: UUID,
+    *,
+    owner_user_id: UUID,
 ) -> Decision | None:
     statement = (
         select(Decision)
         .where(
             Decision.id == decision_id,
+            Decision.owner_user_id == owner_user_id,
         )
         .with_for_update()
     )
