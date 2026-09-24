@@ -270,10 +270,10 @@ def create_decision_alternative(
     decision_id: UUID,
     alternative: DecisionAlternativeCreate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> DecisionAlternative:
     decision = decision_repository.get_decision_by_id_for_update(
-        session,
-        decision_id,
+        session, decision_id, owner_user_id=authenticated_user.user.id
     )
 
     if decision is None:
@@ -335,10 +335,12 @@ def update_decision_alternative(
     alternative_id: UUID,
     alternative_update: DecisionAlternativeUpdate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> DecisionAlternative:
     decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if decision is None:
@@ -407,10 +409,10 @@ def delete_decision_alternative(
     decision_id: UUID,
     alternative_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Response:
     decision = decision_repository.get_decision_by_id_for_update(
-        session,
-        decision_id,
+        session, decision_id, owner_user_id=authenticated_user.user.id
     )
 
     if decision is None:
@@ -477,10 +479,12 @@ def create_decision_evidence(
     alternative_id: UUID,
     evidence: DecisionEvidenceCreate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> DecisionEvidenceResponse:
     decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if decision is None:
@@ -623,10 +627,10 @@ def delete_decision_evidence(
     alternative_id: UUID,
     decision_evidence_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Response:
     decision = decision_repository.get_decision_by_id_for_update(
-        session,
-        decision_id,
+        session, decision_id, owner_user_id=authenticated_user.user.id
     )
 
     if decision is None:
@@ -698,10 +702,12 @@ def delete_decision_evidence(
 def submit_decision_for_review(
     decision_id: UUID,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Decision:
     decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if decision is None:
@@ -737,10 +743,12 @@ def decide_decision(
     decision_id: UUID,
     outcome: DecisionOutcomeCreate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Decision:
     decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if decision is None:
@@ -778,10 +786,12 @@ def cancel_decision(
     decision_id: UUID,
     cancellation: DecisionCancellationCreate,
     session: SessionDependency,
+    authenticated_user: AuthenticatedUserDependency,
 ) -> Decision:
     decision = decision_repository.get_decision_by_id_for_update(
         session,
         decision_id,
+        owner_user_id=authenticated_user.user.id,
     )
 
     if decision is None:

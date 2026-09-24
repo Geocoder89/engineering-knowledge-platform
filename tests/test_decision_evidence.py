@@ -140,10 +140,13 @@ def test_database_persists_supporting_decision_evidence(
 
 
 def test_database_rejects_duplicate_evidence_link(
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
 ) -> None:
     graph = create_evidence_test_graph(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
 
     first_evidence = DecisionEvidence(
@@ -330,10 +333,12 @@ def test_adds_and_lists_decision_evidence_with_citation(
 
 def test_rejects_duplicate_decision_evidence_link(
     authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
 ) -> None:
     graph = create_evidence_test_graph(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     evidence_url = (
         f"/decisions/{graph.decision.id}/alternatives/{graph.alternative.id}/evidence"
@@ -378,11 +383,13 @@ def test_rejects_duplicate_decision_evidence_link(
 )
 def test_rejects_evidence_from_document_that_is_not_ready(
     authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
     document_status: str,
 ) -> None:
     graph = create_evidence_test_graph(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
     graph.document.status = document_status
     db_session.flush()
@@ -500,10 +507,12 @@ def test_rejects_invalid_decision_evidence_request(
 
 def test_rejects_unknown_document_chunk_as_evidence(
     authenticated_client,
+    authenticated_user: AuthenticatedUser,
     db_session: Session,
 ) -> None:
     graph = create_evidence_test_graph(
         db_session,
+        owner_user_id=authenticated_user.user.id,
     )
 
     response = authenticated_client.post(
