@@ -99,6 +99,7 @@ def finalize_decision(
     finalized_decision = decision_repository.finalize_decision(
         session,
         decision=decision,
+        decided_by_user_id=actor_user_id,
         selected_alternative_id=selected_alternative.id,
         rationale=rationale,
         decided_at=decided_at,

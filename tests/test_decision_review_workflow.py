@@ -522,6 +522,8 @@ def test_finalizes_decision_with_selected_alternative(
 
     assert submit_response.status_code == 200
 
+    assert submit_response.json()["decided_by_user_id"] is None
+
     rationale = (
         "Reducing the pressure limit provides the "
         "strongest documented safety improvement."
@@ -542,6 +544,7 @@ def test_finalizes_decision_with_selected_alternative(
 
     assert body["id"] == str(decision.id)
     assert body["status"] == "decided"
+    assert body["decided_by_user_id"] == str(authenticated_user.user.id)
     assert body["selected_alternative_id"] == str(
         selected_alternative.id,
     )
@@ -566,6 +569,21 @@ def test_finalizes_decision_with_selected_alternative(
     )
     assert body["cancelled_at"] is None
     assert body["superseded_at"] is None
+
+    db_session.refresh(decision)
+
+    assert decision.decided_by_user_id == authenticated_user.user.id
+    assert decision.created_by_user_id is None
+
+    record_response = authenticated_client.get(
+        f"/decisions/{decision.id}/record",
+    )
+
+    assert record_response.status_code == 200
+
+    record = record_response.json()
+    assert record["decided_by_user_id"] == str(authenticated_user.user.id)
+    assert record["created_by_user_id"] is None
 
 
 def test_cancels_decision_under_review(

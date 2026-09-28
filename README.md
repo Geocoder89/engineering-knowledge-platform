@@ -4,7 +4,7 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution is also implemented. Creator/reviewer attribution on decision records, frontend integration, and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution and creator/finalizer attribution on decision records are also implemented. Frontend integration and additional production hardening remain planned.
 
 ## Why This Project Exists
 
@@ -48,6 +48,9 @@ This platform creates a structured decision record that connects each outcome to
 - Finalize a decision with a selected alternative and rationale
 - Cancel draft or in-review decisions with a rationale
 - Prevent alternative and evidence changes after submission
+- Record the authenticated creator as `created_by_user_id`
+- Record the authenticated finalizer as `decided_by_user_id` when an outcome is selected
+- Return attribution in decision responses and assembled records, preserving null values for unknown historical attribution
 - Retrieve a frontend-ready assembled decision record
 
 ### Auditability and integrity
@@ -133,6 +136,7 @@ It combines:
 - Full document citation metadata
 - Audit-history event count
 - Link to the paginated history endpoint
+- Creator and finalizer user IDs, where recorded
 
 All evidence for the record is loaded through one decision-wide query, avoiding an evidence query for every alternative.
 
@@ -407,7 +411,9 @@ The project test suite covers:
 - Fixed-query evidence loading
 - Registration, authentication, and email-verification workflows
 - Transactional-email delivery and provider-failure handling
-
+- Creator attribution on creation and finalizer attribution on finalization
+- Persisted finalizer identity and attribution in assembled decision records
+- Historical decisions retaining null attribution without inferred backfills
 Run lint and formatting verification:
 
 ```bash
@@ -461,7 +467,7 @@ tests/               Unit, integration, API, and worker tests
 - Document search authorization and cross-resource evidence scoping — implemented
 - Decision ownership, nested mutation authorization, and review-transition authorization — implemented
 - Actor identity in decision audit events and audit-history responses — implemented
-- Creator and reviewer attribution — planned
+- Creator and finalizer attribution on decision records — implemented
 - Additional abuse protection and authentication hardening — planned
 
 ### Production readiness
@@ -490,7 +496,7 @@ This repository is under active development and is not yet presented as a produc
 
 Current limitations include:
 
-- Dedicated creator/reviewer attribution on decision records remains planned; authenticated actor attribution is available in audit events
+- - Historical decisions may lack creator or finalizer attribution; unknown identities remain null
 - Local filesystem document storage
 - No hosted deployment configuration
 - No CI pipeline

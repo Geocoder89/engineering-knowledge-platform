@@ -39,6 +39,28 @@ class Decision(Base):
         nullable=False,
         index=True,
     )
+
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "users.id",
+            name="fk_decisions_created_by_user_id_users",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    decided_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "users.id",
+            name="fk_decisions_decided_by_user_id_users",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(
         String(200),
         nullable=False,

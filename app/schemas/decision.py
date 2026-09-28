@@ -53,6 +53,8 @@ class DecisionCreate(BaseModel):
 
 class DecisionResponse(DecisionCreate):
     id: UUID
+    created_by_user_id: UUID | None
+    decided_by_user_id: UUID | None
     status: DecisionStatus
     created_at: datetime
     updated_at: datetime

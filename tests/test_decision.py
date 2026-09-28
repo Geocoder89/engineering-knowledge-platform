@@ -92,6 +92,7 @@ def test_repository_creates_and_retrieves_decision_for_owner() -> None:
             created_decision = decision_repository.create_decision(
                 session,
                 owner_user_id=owner_id,
+                created_by_user_id=owner_id,
                 title="Cooling pressure limit",
                 question=("Should the maximum cooling-system pressure be reduced?"),
             )
@@ -328,18 +329,21 @@ def test_repository_lists_and_counts_only_decisions_owned_by_user() -> None:
             owner_first_decision = decision_repository.create_decision(
                 session,
                 owner_user_id=owner.id,
+                created_by_user_id=owner.id,
                 title="Owner first decision",
                 question="What should the owner choose first?",
             )
             decision_repository.create_decision(
                 session,
                 owner_user_id=other_user.id,
+                created_by_user_id=other_user.id,
                 title="Other user's decision",
                 question="What should the other user choose?",
             )
             owner_second_decision = decision_repository.create_decision(
                 session,
                 owner_user_id=owner.id,
+                created_by_user_id=owner.id,
                 title="Owner second decision",
                 question="What should the owner choose second?",
             )
