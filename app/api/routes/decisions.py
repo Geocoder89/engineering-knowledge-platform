@@ -133,7 +133,9 @@ def create_decision(
         question=decision.question,
     )
 
-    decision_audit_service.record_decision_created(session, decision=created_decision)
+    decision_audit_service.record_decision_created(
+        session, decision=created_decision, actor_user_id=authenticated_user.user.id
+    )
     session.commit()
 
     return created_decision
@@ -293,6 +295,7 @@ def create_decision_alternative(
 
     decision_audit_service.record_decision_alternative_added(
         session,
+        actor_user_id=authenticated_user.user.id,
         alternative=created_alternative,
     )
 
@@ -391,6 +394,7 @@ def update_decision_alternative(
 
     decision_audit_service.record_decision_alternative_updated(
         session,
+        actor_user_id=authenticated_user.user.id,
         alternative=updated_alternative,
         previous_values=previous_values,
         new_values=new_values,
@@ -453,6 +457,7 @@ def delete_decision_alternative(
     decision_audit_service.record_decision_alternative_removed(
         session,
         decision_id=decision.id,
+        actor_user_id=authenticated_user.user.id,
         alternative_id=removed_alternative_id,
         title=removed_title,
         description=removed_description,
@@ -568,6 +573,7 @@ def create_decision_evidence(
     )
     decision_audit_service.record_decision_evidence_added(
         session,
+        actor_user_id=authenticated_user.user.id,
         decision_id=decision.id,
         citation=created_citation,
     )
@@ -686,6 +692,7 @@ def delete_decision_evidence(
     decision_audit_service.record_decision_evidence_removed(
         session,
         decision_id=decision.id,
+        actor_user_id=authenticated_user.user.id,
         citation=removed_citation,
     )
 
@@ -720,6 +727,7 @@ def submit_decision_for_review(
     try:
         submitted_decision = decision_review_service.submit_decision_for_review(
             session,
+            actor_user_id=authenticated_user.user.id,
             decision=decision,
         )
     except (
@@ -761,6 +769,7 @@ def decide_decision(
     try:
         decided_decision = decision_review_service.finalize_decision(
             session,
+            actor_user_id=authenticated_user.user.id,
             decision=decision,
             selected_alternative_id=(outcome.selected_alternative_id),
             rationale=outcome.rationale,
@@ -804,6 +813,7 @@ def cancel_decision(
     try:
         cancelled_decision = decision_review_service.cancel_decision(
             session,
+            actor_user_id=authenticated_user.user.id,
             decision=decision,
             rationale=cancellation.rationale,
         )

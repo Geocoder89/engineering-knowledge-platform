@@ -312,6 +312,7 @@ def test_repository_appends_and_lists_decision_audit_events(
     created_event = decision_audit_repository.append_decision_audit_event(
         db_session,
         decision_id=decision.id,
+        actor_user_id=authenticated_user.user.id,
         event_type=DecisionAuditEventType.DECISION_CREATED,
         event_data=created_event_data,
     )
@@ -323,6 +324,7 @@ def test_repository_appends_and_lists_decision_audit_events(
     submitted_event = decision_audit_repository.append_decision_audit_event(
         db_session,
         decision_id=decision.id,
+        actor_user_id=authenticated_user.user.id,
         event_type=DecisionAuditEventType.DECISION_SUBMITTED,
         event_data=submitted_event_data,
     )
@@ -347,8 +349,7 @@ def test_repository_appends_and_lists_decision_audit_events(
 
 
 def test_creating_decision_records_audit_event(
-    authenticated_client,
-    db_session: Session,
+    authenticated_client, db_session: Session, authenticated_user: AuthenticatedUser
 ) -> None:
     payload = {
         "title": "Cooling pressure limit",
@@ -377,6 +378,7 @@ def test_creating_decision_records_audit_event(
     event = events[0]
 
     assert event.sequence_number == 1
+    assert event.actor_user_id == authenticated_user.user.id
     assert event.event_type == "decision_created"
     assert event.event_data == {
         "title": payload["title"],
@@ -388,6 +390,7 @@ def test_creating_decision_records_audit_event(
 def test_records_decision_alternative_audit_history(
     authenticated_client,
     db_session: Session,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision_response = authenticated_client.post(
         "/decisions",
@@ -437,6 +440,8 @@ def test_records_decision_alternative_audit_history(
             decision["id"],
         ),
     )
+
+    assert all(event.actor_user_id == authenticated_user.user.id for event in events)
 
     assert [event.sequence_number for event in events] == [
         1,
@@ -543,6 +548,8 @@ def test_records_decision_evidence_audit_history(
             decision["id"],
         ),
     )
+
+    assert all(event.actor_user_id == authenticated_user.user.id for event in events)
 
     assert [event.event_type for event in events] == [
         "decision_created",
@@ -651,6 +658,7 @@ def test_service_records_submission_and_finalization_audit_history(
 
     submitted_decision = decision_review_service.submit_decision_for_review(
         db_session,
+        actor_user_id=authenticated_user.user.id,
         decision=decision,
     )
 
@@ -662,6 +670,7 @@ def test_service_records_submission_and_finalization_audit_history(
     )
     finalized_decision = decision_review_service.finalize_decision(
         db_session,
+        actor_user_id=authenticated_user.user.id,
         decision=decision,
         selected_alternative_id=alternatives[1].id,
         rationale=rationale,
@@ -673,6 +682,8 @@ def test_service_records_submission_and_finalization_audit_history(
         db_session,
         decision_id=decision.id,
     )
+
+    assert all(event.actor_user_id == authenticated_user.user.id for event in events)
 
     assert [event.sequence_number for event in events] == [
         1,
@@ -729,6 +740,7 @@ def test_service_records_cancellation_audit_history(
     rationale = "The decision is no longer required because the project scope changed."
     cancelled_decision = decision_review_service.cancel_decision(
         db_session,
+        actor_user_id=authenticated_user.user.id,
         decision=decision,
         rationale=rationale,
     )
@@ -739,6 +751,8 @@ def test_service_records_cancellation_audit_history(
         db_session,
         decision_id=decision.id,
     )
+
+    assert all(event.actor_user_id == authenticated_user.user.id for event in events)
 
     assert len(events) == 1
     assert events[0].sequence_number == 1
@@ -753,6 +767,7 @@ def test_service_records_cancellation_audit_history(
 
 def test_gets_decision_audit_history_in_sequence_order(
     authenticated_client,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision_response = authenticated_client.post(
         "/decisions",
@@ -785,6 +800,12 @@ def test_gets_decision_audit_history_in_sequence_order(
     )
 
     assert response.status_code == 200
+
+    items = response.json()["items"]
+    assert items
+    assert all(
+        item["actor_user_id"] == str(authenticated_user.user.id) for item in items
+    )
 
     body = response.json()
 
@@ -862,3 +883,99 @@ def test_rejects_malformed_decision_audit_history_id(
     )
 
     assert response.status_code == 422
+
+
+def test_database_persists_decision_audit_event_actor(
+    db_session: Session,
+    authenticated_user,
+) -> None:
+    decision = Decision(
+        owner_user_id=authenticated_user.user.id,
+        title="Cooling pressure limit",
+        question="Should the maximum cooling-system pressure be reduced?",
+    )
+    db_session.add(decision)
+    db_session.flush()
+
+    event = DecisionAuditEvent(
+        decision_id=decision.id,
+        actor_user_id=authenticated_user.user.id,
+        sequence_number=1,
+        event_type="decision_created",
+        event_data={
+            "title": decision.title,
+            "question": decision.question,
+            "status": decision.status,
+        },
+    )
+    db_session.add(event)
+    db_session.flush()
+
+    assert event.actor_user_id == authenticated_user.user.id
+
+
+def test_repository_appends_decision_audit_event_actor(
+    db_session: Session,
+    authenticated_user,
+) -> None:
+    decision = Decision(
+        owner_user_id=authenticated_user.user.id,
+        title="Cooling pressure limit",
+        question="Should the maximum cooling-system pressure be reduced?",
+    )
+    db_session.add(decision)
+    db_session.flush()
+
+    event = decision_audit_repository.append_decision_audit_event(
+        db_session,
+        decision_id=decision.id,
+        actor_user_id=authenticated_user.user.id,
+        event_type=DecisionAuditEventType.DECISION_CREATED,
+        event_data={
+            "title": decision.title,
+            "question": decision.question,
+            "status": decision.status,
+        },
+    )
+
+    assert event.actor_user_id == authenticated_user.user.id
+
+
+def test_history_returns_null_actor_for_historical_event(
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
+    db_session: Session,
+) -> None:
+    decision = Decision(
+        owner_user_id=authenticated_user.user.id,
+        title="Historical decision",
+        question="Should the operating pressure be reduced?",
+    )
+    db_session.add(decision)
+    db_session.flush()
+
+    event = DecisionAuditEvent(
+        decision_id=decision.id,
+        actor_user_id=None,
+        sequence_number=1,
+        event_type="decision_created",
+        event_data={
+            "title": decision.title,
+            "question": decision.question,
+            "status": decision.status,
+        },
+    )
+    db_session.add(event)
+    db_session.flush()
+
+    response = authenticated_client.get(
+        f"/decisions/{decision.id}/history?offset=0&limit=10",
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["id"] == str(event.id)
+    assert body["items"][0]["actor_user_id"] is None
