@@ -31,6 +31,7 @@ def utc_now() -> datetime:
 def submit_decision_for_review(
     session: Session,
     *,
+    actor_user_id: UUID,
     decision: Decision,
 ) -> Decision:
     alternative_count = decision_alternative_repository.count_decision_alternatives(
@@ -60,6 +61,7 @@ def submit_decision_for_review(
     decision_audit_service.record_decision_submitted(
         session,
         decision=submitted_decision,
+        actor_user_id=actor_user_id,
         previous_status=previous_status,
         submitted_at=submitted_at,
     )
@@ -70,6 +72,7 @@ def submit_decision_for_review(
 def finalize_decision(
     session: Session,
     *,
+    actor_user_id: UUID,
     decision: Decision,
     selected_alternative_id: UUID,
     rationale: str,
@@ -104,6 +107,7 @@ def finalize_decision(
     decision_audit_service.record_decision_finalized(
         session,
         decision=finalized_decision,
+        actor_user_id=actor_user_id,
         previous_status=previous_status,
         selected_alternative_id=selected_alternative.id,
         rationale=rationale,
@@ -116,6 +120,7 @@ def finalize_decision(
 def cancel_decision(
     session: Session,
     *,
+    actor_user_id: UUID,
     decision: Decision,
     rationale: str,
 ) -> Decision:
@@ -137,6 +142,7 @@ def cancel_decision(
     decision_audit_service.record_decision_cancelled(
         session,
         decision=cancelled_decision,
+        actor_user_id=actor_user_id,
         previous_status=previous_status,
         rationale=rationale,
         cancelled_at=cancelled_at,

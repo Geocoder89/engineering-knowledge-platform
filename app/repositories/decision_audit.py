@@ -12,6 +12,7 @@ def append_decision_audit_event(
     session: Session,
     *,
     decision_id: UUID,
+    actor_user_id: UUID | None,
     event_type: DecisionAuditEventType,
     event_data: dict[str, object],
 ) -> DecisionAuditEvent:
@@ -40,6 +41,7 @@ def append_decision_audit_event(
 
     event = DecisionAuditEvent(
         decision_id=decision_id,
+        actor_user_id=actor_user_id,
         sequence_number=next_sequence,
         event_type=event_type.value,
         event_data=event_data,

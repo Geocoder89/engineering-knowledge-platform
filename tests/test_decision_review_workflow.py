@@ -333,6 +333,7 @@ def test_rejects_incomplete_decision_submission(
 
 def test_service_submits_complete_decision_for_review(
     monkeypatch,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     session = Mock(
         spec=Session,
@@ -385,6 +386,7 @@ def test_service_submits_complete_decision_for_review(
 
     submitted_decision = decision_review_service.submit_decision_for_review(
         session,
+        actor_user_id=authenticated_user.user.id,
         decision=decision,
     )
 
@@ -399,6 +401,7 @@ def test_service_submits_complete_decision_for_review(
 
     record_decision_submitted.assert_called_once_with(
         session,
+        actor_user_id=authenticated_user.user.id,
         decision=submitted_decision,
         previous_status="draft",
         submitted_at=submitted_at,

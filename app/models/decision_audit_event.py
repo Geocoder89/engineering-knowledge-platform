@@ -83,3 +83,13 @@ class DecisionAuditEvent(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "users.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )

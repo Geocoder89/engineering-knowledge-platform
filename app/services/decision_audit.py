@@ -17,10 +17,12 @@ def record_decision_created(
     session: Session,
     *,
     decision: Decision,
+    actor_user_id: UUID,
 ) -> DecisionAuditEvent:
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=decision.id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.DECISION_CREATED,
         event_data={
             "title": decision.title,
@@ -33,11 +35,13 @@ def record_decision_created(
 def record_decision_alternative_added(
     session: Session,
     *,
+    actor_user_id: UUID,
     alternative: DecisionAlternative,
 ) -> DecisionAuditEvent:
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=alternative.decision_id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.ALTERNATIVE_ADDED,
         event_data={
             "alternative_id": str(
@@ -53,6 +57,7 @@ def record_decision_alternative_added(
 def record_decision_alternative_updated(
     session: Session,
     *,
+    actor_user_id: UUID,
     alternative: DecisionAlternative,
     previous_values: dict[str, object],
     new_values: dict[str, object],
@@ -60,6 +65,7 @@ def record_decision_alternative_updated(
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=alternative.decision_id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.ALTERNATIVE_UPDATED,
         event_data={
             "alternative_id": str(
@@ -74,6 +80,7 @@ def record_decision_alternative_updated(
 def record_decision_alternative_removed(
     session: Session,
     *,
+    actor_user_id: UUID,
     decision_id: UUID,
     alternative_id: UUID,
     title: str,
@@ -84,6 +91,7 @@ def record_decision_alternative_removed(
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=decision_id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.ALTERNATIVE_REMOVED,
         event_data={
             "alternative_id": str(
@@ -140,12 +148,14 @@ def build_decision_evidence_event_data(
 def record_decision_evidence_added(
     session: Session,
     *,
+    actor_user_id: UUID,
     decision_id: UUID,
     citation: DecisionEvidenceCitation,
 ) -> DecisionAuditEvent:
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=decision_id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.EVIDENCE_ADDED,
         event_data=build_decision_evidence_event_data(
             citation,
@@ -157,11 +167,13 @@ def record_decision_evidence_removed(
     session: Session,
     *,
     decision_id: UUID,
+    actor_user_id: UUID,
     citation: DecisionEvidenceCitation,
 ) -> DecisionAuditEvent:
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=decision_id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.EVIDENCE_REMOVED,
         event_data=build_decision_evidence_event_data(
             citation,
@@ -172,6 +184,7 @@ def record_decision_evidence_removed(
 def record_decision_submitted(
     session: Session,
     *,
+    actor_user_id: UUID,
     decision: Decision,
     previous_status: str,
     submitted_at: datetime,
@@ -179,6 +192,7 @@ def record_decision_submitted(
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=decision.id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.DECISION_SUBMITTED,
         event_data={
             "previous_status": previous_status,
@@ -192,6 +206,7 @@ def record_decision_finalized(
     session: Session,
     *,
     decision: Decision,
+    actor_user_id: UUID,
     previous_status: str,
     selected_alternative_id: UUID,
     rationale: str,
@@ -200,6 +215,7 @@ def record_decision_finalized(
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=decision.id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.DECISION_FINALIZED,
         event_data={
             "previous_status": previous_status,
@@ -216,6 +232,7 @@ def record_decision_finalized(
 def record_decision_cancelled(
     session: Session,
     *,
+    actor_user_id: UUID,
     decision: Decision,
     previous_status: str,
     rationale: str,
@@ -224,6 +241,7 @@ def record_decision_cancelled(
     return decision_audit_repository.append_decision_audit_event(
         session,
         decision_id=decision.id,
+        actor_user_id=actor_user_id,
         event_type=DecisionAuditEventType.DECISION_CANCELLED,
         event_data={
             "previous_status": previous_status,
