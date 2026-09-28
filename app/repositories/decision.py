@@ -12,10 +12,16 @@ def create_decision(
     session: Session,
     *,
     owner_user_id: UUID,
+    created_by_user_id: UUID,
     title: str,
     question: str,
 ) -> Decision:
-    decision = Decision(owner_user_id=owner_user_id, title=title, question=question)
+    decision = Decision(
+        owner_user_id=owner_user_id,
+        created_by_user_id=created_by_user_id,
+        title=title,
+        question=question,
+    )
     session.add(decision)
     session.flush()
     return decision
@@ -115,6 +121,7 @@ def get_decision_by_id_for_update(
 def finalize_decision(
     session: Session,
     *,
+    decided_by_user_id: UUID,
     decision: Decision,
     selected_alternative_id: UUID,
     rationale: str,
@@ -124,6 +131,7 @@ def finalize_decision(
     decision.selected_alternative_id = selected_alternative_id
     decision.rationale = rationale
     decision.decided_at = decided_at
+    decision.decided_by_user_id = decided_by_user_id
     decision.cancelled_at = None
     decision.superseded_at = None
 

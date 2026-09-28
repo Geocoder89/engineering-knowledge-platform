@@ -129,6 +129,7 @@ def create_decision(
     created_decision = decision_repository.create_decision(
         session,
         owner_user_id=authenticated_user.user.id,
+        created_by_user_id=authenticated_user.user.id,
         title=decision.title,
         question=decision.question,
     )
@@ -241,6 +242,8 @@ def get_assembled_decision_record(
 
     return DecisionRecordResponse(
         id=decision.id,
+        created_by_user_id=decision.created_by_user_id,
+        decided_by_user_id=decision.decided_by_user_id,
         title=decision.title,
         question=decision.question,
         status=decision.status,

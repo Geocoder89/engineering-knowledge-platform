@@ -77,6 +77,7 @@ def test_decision_list_contains_only_authenticated_users_decisions(
     owner_first_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=authenticated_user.user.id,
+        created_by_user_id=authenticated_user.user.id,
         title="Owner first decision",
         question="What should the owner choose first?",
     )
@@ -91,6 +92,7 @@ def test_decision_list_contains_only_authenticated_users_decisions(
     decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=authenticated_user.user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -98,6 +100,7 @@ def test_decision_list_contains_only_authenticated_users_decisions(
     owner_second_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=authenticated_user.user.id,
+        created_by_user_id=authenticated_user.user.id,
         title="Owner second decision",
         question="What should the owner choose second?",
     )
@@ -138,6 +141,7 @@ def test_authenticated_user_can_retrieve_owned_decision(
     decision = decision_repository.create_decision(
         db_session,
         owner_user_id=authenticated_user.user.id,
+        created_by_user_id=authenticated_user.user.id,
         title="Cooling pressure limit",
         question="Should the maximum cooling-system pressure be reduced?",
     )
@@ -165,6 +169,7 @@ def test_other_users_decision_is_not_found(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -193,6 +198,7 @@ def test_other_users_decision_cannot_receive_alternative(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -235,6 +241,7 @@ def test_other_users_decision_alternative_cannot_be_updated(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -285,6 +292,7 @@ def test_other_users_decision_alternative_cannot_be_deleted(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -327,6 +335,7 @@ def test_other_users_decision_cannot_receive_evidence(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -381,6 +390,7 @@ def test_other_users_decision_evidence_cannot_be_deleted(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -421,6 +431,7 @@ def test_other_users_decision_cannot_be_submitted_for_review(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -461,6 +472,7 @@ def test_other_users_decision_cannot_be_finalized(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
@@ -516,6 +528,7 @@ def test_other_users_decision_cannot_be_cancelled(
     other_users_decision = decision_repository.create_decision(
         db_session,
         owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
         title="Other user's decision",
         question="What should the other user choose?",
     )
