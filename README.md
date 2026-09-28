@@ -4,7 +4,7 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Identity attribution across decision workflows, frontend integration, and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution is also implemented. Creator/reviewer attribution on decision records, frontend integration, and additional production hardening remain planned.
 
 ## Why This Project Exists
 
@@ -59,6 +59,10 @@ This platform creates a structured decision record that connects each outcome to
 - Database constraints for statuses, evidence types, ordering, and uniqueness
 - Row-level locking for concurrency-sensitive decision changes
 - Chronological, paginated decision history
+- Authenticated actor attribution for decision creation, alternative changes, evidence changes, submission, finalization, and cancellation
+- Actor identity exposed as `actor_user_id` on each audit-history item
+- Historical events without recorded attribution return `actor_user_id: null`; attribution is not inferred or backfilled
+- Foreign-key protection against deletion of users referenced by audit events
 
 ### Identity and authentication
 
@@ -395,6 +399,9 @@ The project test suite covers:
 - Decision state transitions
 - Post-submission immutability
 - Audit-event immutability
+- Actor attribution across decision audit writes
+- Audit-history API responses containing authenticated actor IDs
+- Historical audit events returning null actor attribution
 - Assembled-record composition
 - API failure and boundary conditions
 - Fixed-query evidence loading
@@ -453,8 +460,8 @@ tests/               Unit, integration, API, and worker tests
 - Document ownership and authorization — implemented
 - Document search authorization and cross-resource evidence scoping — implemented
 - Decision ownership, nested mutation authorization, and review-transition authorization — implemented
+- Actor identity in decision audit events and audit-history responses — implemented
 - Creator and reviewer attribution — planned
-- Actor identity in decision audit events — planned
 - Additional abuse protection and authentication hardening — planned
 
 ### Production readiness
@@ -483,7 +490,7 @@ This repository is under active development and is not yet presented as a produc
 
 Current limitations include:
 
-- Creator/reviewer attribution and authenticated actor identity are not yet wired into decision records and audit events
+- Dedicated creator/reviewer attribution on decision records remains planned; authenticated actor attribution is available in audit events
 - Local filesystem document storage
 - No hosted deployment configuration
 - No CI pipeline

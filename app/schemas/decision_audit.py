@@ -9,10 +9,12 @@ from app.domain.decision_audit import DecisionAuditEventType
 class DecisionAuditEventResponse(BaseModel):
     id: UUID
     decision_id: UUID
+    actor_user_id: UUID | None
     sequence_number: int
     event_type: DecisionAuditEventType
     event_data: dict[str, object]
     created_at: datetime
+    actor_user_id: UUID | None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -21,6 +23,7 @@ class DecisionAuditEventResponse(BaseModel):
 
 class DecisionAuditHistoryResponse(BaseModel):
     decision_id: UUID
+
     items: list[DecisionAuditEventResponse]
     total: int
     offset: int

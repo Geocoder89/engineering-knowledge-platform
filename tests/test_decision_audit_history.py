@@ -767,6 +767,7 @@ def test_service_records_cancellation_audit_history(
 
 def test_gets_decision_audit_history_in_sequence_order(
     authenticated_client,
+    authenticated_user: AuthenticatedUser,
 ) -> None:
     decision_response = authenticated_client.post(
         "/decisions",
@@ -799,6 +800,12 @@ def test_gets_decision_audit_history_in_sequence_order(
     )
 
     assert response.status_code == 200
+
+    items = response.json()["items"]
+    assert items
+    assert all(
+        item["actor_user_id"] == str(authenticated_user.user.id) for item in items
+    )
 
     body = response.json()
 
@@ -932,3 +939,43 @@ def test_repository_appends_decision_audit_event_actor(
     )
 
     assert event.actor_user_id == authenticated_user.user.id
+
+
+def test_history_returns_null_actor_for_historical_event(
+    authenticated_client,
+    authenticated_user: AuthenticatedUser,
+    db_session: Session,
+) -> None:
+    decision = Decision(
+        owner_user_id=authenticated_user.user.id,
+        title="Historical decision",
+        question="Should the operating pressure be reduced?",
+    )
+    db_session.add(decision)
+    db_session.flush()
+
+    event = DecisionAuditEvent(
+        decision_id=decision.id,
+        actor_user_id=None,
+        sequence_number=1,
+        event_type="decision_created",
+        event_data={
+            "title": decision.title,
+            "question": decision.question,
+            "status": decision.status,
+        },
+    )
+    db_session.add(event)
+    db_session.flush()
+
+    response = authenticated_client.get(
+        f"/decisions/{decision.id}/history?offset=0&limit=10",
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["id"] == str(event.id)
+    assert body["items"][0]["actor_user_id"] is None
