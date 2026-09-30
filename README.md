@@ -386,6 +386,8 @@ The generated OpenAPI documentation provides the complete methods, payloads, val
 
 ## Verification
 
+GitHub Actions runs `.github/workflows/ci.yml` for pull requests targeting `master` and pushes to `master`. It checks dependency compatibility, Ruff lint and formatting, migration application and schema consistency, and the pytest suite using PostgreSQL 17 with pgvector.
+
 Run the complete test suite:
 
 ```bash
@@ -414,6 +416,7 @@ The project test suite covers:
 - Creator attribution on creation and finalizer attribution on finalization
 - Persisted finalizer identity and attribution in assembled decision records
 - Historical decisions retaining null attribution without inferred backfills
+
 Run lint and formatting verification:
 
 ```bash
@@ -472,12 +475,14 @@ tests/               Unit, integration, API, and worker tests
 
 ### Production readiness
 
-- Containerized API and worker services
-- CI quality gates
+- Containerized API and worker services — planned; Docker Compose currently runs PostgreSQL only
+- GitHub Actions CI quality gates — implemented
 - Environment and secret hardening
 - Structured request and correlation logging
-- Readiness and liveness checks
-- CORS and rate-limit policies
+- Basic API liveness endpoint — implemented at `/health`
+- Database-aware API readiness check — planned
+- Authentication endpoint rate limiting — implemented
+- Cross-origin browser configuration and deployment-level traffic controls — planned
 - Deployment configuration
 - Operational monitoring
 - Backup and recovery planning
@@ -496,10 +501,9 @@ This repository is under active development and is not yet presented as a produc
 
 Current limitations include:
 
-- - Historical decisions may lack creator or finalizer attribution; unknown identities remain null
+- Historical decisions may lack creator or finalizer attribution; unknown identities remain null
 - Local filesystem document storage
 - No hosted deployment configuration
-- No CI pipeline
 - No frontend
 - No operational monitoring or backup strategy
 - No exposed decision-supersession workflow
