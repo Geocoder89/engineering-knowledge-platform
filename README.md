@@ -361,6 +361,76 @@ python -m app.workers.document_processing
 
 The API and worker use the same PostgreSQL database and document-storage configuration.
 
+### Alternative: run the backend in containers
+
+This option needs Git and Docker Compose v2; host Python is not required. From
+a fresh checkout, copy `.env.example` to `.env` and configure the settings above.
+The API and worker share one Python 3.13 image and run as a non-root user.
+
+```bash
+docker compose build api
+docker compose run --rm migrate
+docker compose up -d --wait api worker
+docker compose ps
+curl --fail http://127.0.0.1:8000/health
+```
+
+The migration command starts PostgreSQL, waits for its health check, and applies
+Alembic migrations as a separate one-off operation. Continue to startup only when
+it succeeds. Neither the API nor the worker applies migrations on startup. After
+pulling code changes, rebuild the image and run the migration command before
+recreating the application services.
+
+The worker requires a real `OPENAI_API_KEY` at startup. To run only the API and
+database without an embedding key, use `docker compose up -d --wait api` instead.
+Embedding generation and semantic search require the key; registration and
+verification resend still require the three email delivery settings documented
+above. Container startup alone does not configure either external provider.
+
+Compose loads runtime settings from `.env`, overrides `DATABASE_URL` to use
+`db:5432`, and fixes `DOCUMENT_STORAGE_PATH` to `/app/var/document-storage`.
+The host Python workflow continues to use the `localhost` URL in `.env`. If the
+database password contains URL-sensitive characters, set `CONTAINER_DATABASE_URL`
+with a percent-encoded password, as shown in `.env.example`. Set `API_PORT` to
+change the host API port. API and PostgreSQL ports bind to loopback for local use.
+
+Database records live in the existing `postgres_data` named volume. Uploaded
+files live in a separate `document_storage` named volume mounted at the same path
+in both application services. Existing files under the host's
+`var/document-storage` are not copied automatically. When switching an existing
+database from host Python to containers, copy its documents into the named volume
+before processing or downloading them; do not run host and container workers
+against that database with different storage directories.
+
+```bash
+# With the application services stopped, copy existing host documents if needed:
+docker compose stop api worker
+docker compose run --rm --no-deps \
+  -v "$(pwd)/var/document-storage:/source:ro" api \
+  python -c 'import shutil; shutil.copytree("/source", "/app/var/document-storage", dirs_exist_ok=True)'
+docker compose up -d --wait api worker
+```
+
+Useful operational commands:
+
+```bash
+docker compose logs -f api worker
+docker compose run --rm migrate python -m alembic current
+docker compose run --rm migrate python -m alembic check
+docker compose down
+```
+
+`docker compose down` preserves both named volumes. **Adding `--volumes` deletes
+the database and uploaded documents.** Persistent volumes are not backups. Keep
+the Compose project name stable so subsequent runs attach to the same volumes.
+The worker has 60 seconds to finish its current operation after a stop signal;
+this does not guarantee recovery of interrupted long-running jobs.
+
+The API container health check uses the existing `/health` liveness endpoint;
+database-aware readiness remains a separate planned improvement. Proxy headers
+are disabled until a trusted reverse proxy is configured. This setup is for local
+development and verification; hosted deployment and TLS remain future work.
+
 ## Major API Areas
 
 | Area | Path |
@@ -387,6 +457,12 @@ The generated OpenAPI documentation provides the complete methods, payloads, val
 ## Verification
 
 GitHub Actions runs `.github/workflows/ci.yml` for pull requests targeting `master` and pushes to `master`. It checks dependency compatibility, Ruff lint and formatting, migration application and schema consistency, and the pytest suite using PostgreSQL 17 with pgvector.
+
+A separate container job builds the runtime image, applies migrations, starts the
+API and worker, checks non-root execution and shared document storage, and
+recreates containers to verify database and file persistence. Its dummy embedding
+key and loopback provider URL prevent paid embedding calls. This infrastructure
+smoke test does not replace an end-to-end upload/search workflow test.
 
 Run the complete test suite:
 
@@ -475,7 +551,7 @@ tests/               Unit, integration, API, and worker tests
 
 ### Production readiness
 
-- Containerized API and worker services — planned; Docker Compose currently runs PostgreSQL only
+- Containerized API and worker services — implemented with explicit migrations and persistent shared document storage
 - GitHub Actions CI quality gates — implemented
 - Environment and secret hardening
 - Structured request and correlation logging
