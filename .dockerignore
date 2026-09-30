@@ -1,0 +1,11 @@
+# Allow only runtime source and dependency declarations into the build context.
+**
+!requirements.txt
+!app/
+!app/**
+!migrations/
+!migrations/**
+!alembic.ini
+!Dockerfile
+**/__pycache__/
+**/*.pyc

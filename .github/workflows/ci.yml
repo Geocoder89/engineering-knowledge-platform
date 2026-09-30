@@ -75,3 +75,46 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: decision-platform-ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure isolated container smoke test
+        run: |
+          cp .env.example .env
+          # No live credentials or external embedding/email requests in this job.
+          cat >> .env <<'EOF'
+
+          OPENAI_API_KEY=container-smoke-not-a-real-key
+          OPENAI_BASE_URL=http://127.0.0.1:9
+          EOF
+          docker compose config --quiet
+
+      - name: Build runtime image
+        run: docker compose build api
+
+      - name: Apply migrations explicitly
+        run: docker compose run --rm migrate
+
+      - name: Start API and worker
+        run: docker compose up -d --wait --wait-timeout 90 api worker
+
+      - name: Verify containers and persistent shared storage
+        run: bash scripts/smoke_containers.sh
+
+      - name: Show container diagnostics
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail=100
+
+      - name: Clean up disposable CI volumes
+        if: always()
+        run: docker compose down --volumes --remove-orphans
