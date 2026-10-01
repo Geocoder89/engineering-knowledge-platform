@@ -4,7 +4,21 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution and creator/finalizer attribution on decision records are also implemented. Frontend integration and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution and creator/finalizer attribution on decision records are also implemented. A React frontend design preview is available in `frontend/`; live frontend integration and additional production hardening remain planned.
+
+## Frontend design preview
+
+The `frontend/` directory contains a responsive, interactive React prototype of the decision workspace, document library, and evidence search. It uses clearly labelled fictional data and does not call the API or embedding provider. Changes reset when leaving the decision screen or refreshing.
+
+With Node.js 24 LTS (24.16+ within 24.x) installed:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open http://127.0.0.1:5173. This preview runs independently of the database and containers. See [the frontend guide](frontend/README.md) for the sample walkthrough, Playwright checks, design choices, and planned API integration.
 
 ## Why This Project Exists
 
@@ -677,7 +691,7 @@ Current limitations include:
 - Historical decisions may lack creator or finalizer attribution; unknown identities remain null
 - Local filesystem document storage
 - No hosted deployment configuration
-- No frontend
+- Frontend uses sample data; live authentication and API integration are pending
 - No operational monitoring or backup strategy
 - No exposed decision-supersession workflow
 

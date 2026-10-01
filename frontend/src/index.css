@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@theme inline {
+  --color-background: #f7f7f2;
+  --color-foreground: #28372e;
+  --color-primary: #225f4d;
+  --color-primary-foreground: #ffffff;
+  --color-muted-foreground: #626c5c;
+  --color-accent: #e8eedf;
+  --color-input: #c6d1b8;
+  --color-border: #d7decc;
+  --radius-md: 0.3rem;
+  --radius-lg: 0.5rem;
+}
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
