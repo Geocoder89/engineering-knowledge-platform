@@ -330,7 +330,7 @@ alembic current
 ### 6. Start the API
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --no-access-log
 ```
 
 The API is available at:
@@ -426,10 +426,57 @@ the Compose project name stable so subsequent runs attach to the same volumes.
 The worker has 60 seconds to finish its current operation after a stop signal;
 this does not guarantee recovery of interrupted long-running jobs.
 
-The API container health check uses the existing `/health` liveness endpoint;
-database-aware readiness remains a separate planned improvement. Proxy headers
-are disabled until a trusted reverse proxy is configured. This setup is for local
-development and verification; hosted deployment and TLS remain future work.
+The API container health check uses `/ready` to verify database connectivity.
+Proxy headers are disabled until a trusted reverse proxy is configured. This
+setup is for local development and verification; hosted deployment and TLS remain
+future work.
+
+### Liveness, readiness and request diagnostics
+
+| Endpoint | Success | Failure | Purpose |
+| --- | --- | --- | --- |
+| `GET /health` | `200 {"status":"ok"}` | API cannot respond | Process liveness; does not access PostgreSQL |
+| `GET /ready` | `200 {"status":"ready"}` | `503 {"status":"unavailable"}` | PostgreSQL connectivity and a successful `SELECT 1` |
+
+Both probes are unauthenticated. Readiness responses include `Cache-Control:
+no-store` and never include database exception details. The readiness probe uses
+a fresh connection with a two-second connection timeout and a one-second
+PostgreSQL statement timeout, independently of the normal request connection
+pool. These are component timeouts, not a strict total request deadline. Readiness
+does not validate migrations, application pool capacity, document storage, worker
+progress, email delivery or embedding-provider availability.
+
+Every HTTP request gets a new server-generated UUID in `X-Request-ID`. Incoming
+request IDs are ignored. The same ID is available as `request.state.request_id`
+and appears in one JSON request log entry, including handled errors, CSRF
+rejections and unexpected errors. Unexpected errors before response headers are
+sent return a generic `500` response with the ID; exceptions still propagate to
+the server. For streaming responses, the logged status is the status already
+sent, even if an error occurs later.
+
+The `app.requests` logger writes JSON to stderr with `timestamp`, `level`,
+`event`, `request_id`, `method`, `path`, `status_code`, `duration_ms` and
+`error_type`. Duration covers application handling through response completion
+and any background work awaited by the application. The path is the matched
+route template, such as `/documents/{document_id}`, rather than the actual
+resource identifier. Requests rejected before routing and unknown paths use
+`<unmatched>`.
+
+Request logs exclude query strings, headers, cookies, bodies, client IP addresses
+and exception messages. The Docker command and the local command above disable
+Uvicorn's separate access log, which otherwise includes raw URLs. Server error
+tracebacks and third-party logs are separate; review their handling before public
+deployment. Detailed operational monitoring and centralized logging remain
+future work.
+
+```bash
+curl -i http://127.0.0.1:8000/ready
+docker compose logs --no-log-prefix api
+```
+
+To investigate a request, find its response's `X-Request-ID` in the JSON logs.
+The request logger records diagnostic events; decision audit events remain the
+separate persistent record of who changed a decision.
 
 ## Major API Areas
 
@@ -463,6 +510,8 @@ API and worker, checks non-root execution and shared document storage, and
 recreates containers to verify database and file persistence. Its dummy embedding
 key and loopback provider URL prevent paid embedding calls. This infrastructure
 smoke test does not replace an end-to-end upload/search workflow test.
+It also stops PostgreSQL to verify `/health` stays live while `/ready` returns
+`503`, then restarts PostgreSQL and checks that readiness recovers.
 
 Run the complete test suite:
 
@@ -554,9 +603,9 @@ tests/               Unit, integration, API, and worker tests
 - Containerized API and worker services — implemented with explicit migrations and persistent shared document storage
 - GitHub Actions CI quality gates — implemented
 - Environment and secret hardening
-- Structured request and correlation logging
+- Structured JSON request logging and server-generated request IDs — implemented
 - Basic API liveness endpoint — implemented at `/health`
-- Database-aware API readiness check — planned
+- Database connectivity readiness check — implemented at `/ready`
 - Authentication endpoint rate limiting — implemented
 - Cross-origin browser configuration and deployment-level traffic controls — planned
 - Deployment configuration
