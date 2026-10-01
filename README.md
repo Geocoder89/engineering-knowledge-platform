@@ -542,6 +542,54 @@ The project test suite covers:
 - Persisted finalizer identity and attribution in assembled decision records
 - Historical decisions retaining null attribution without inferred backfills
 
+### Complete backend workflow test
+
+`tests/test_backend_workflow.py` connects the main backend journey in one
+integration test:
+
+1. Register through the API, verify email using the token captured by the test
+   email sender, and log in with real password/session authentication.
+2. Create a document and upload a two-page PDF using the session and CSRF cookies.
+3. Run one real worker iteration to claim the queued job, extract PDF text, chunk
+   it, generate controlled embeddings and persist the result in PostgreSQL.
+4. Search with pgvector, rank the relevant page above a distractor, and retain its
+   source citation when attaching evidence to a decision alternative.
+5. Submit and finalize the decision, then inspect its assembled record, creator
+   and finalizer attribution, and ordered actor-attributed audit history.
+6. Log out and sign in as another registered user; confirm that the original
+   document, download, processing status, evidence, record and history are hidden
+   and that search returns none of the first user's content.
+
+The test also checks unauthenticated access, login before email verification,
+invalid CSRF protection and submission of an incomplete decision. It does not
+bypass authentication or seed decisions/chunks directly into the database.
+
+With the development virtual environment active and `.env` configured for the
+host PostgreSQL connection:
+
+```bash
+docker compose up -d --wait db
+python -m alembic upgrade head
+python -m pytest tests/test_backend_workflow.py -vv
+```
+
+The configured PostgreSQL database must have pgvector installed by migrations,
+and the test role needs permission to create schemas. The test creates its tables
+from model metadata inside a uniquely named schema and the existing outer
+rollback transaction, with uploads in a temporary directory. This keeps the
+worker away from pre-existing processing jobs; rollback removes the test schema
+and records. The API and worker use separate SQLAlchemy sessions on the shared
+test connection, with savepoints instead of independent committed connections.
+Migration correctness and container lifecycle are checked separately in CI.
+
+Email delivery is captured in memory and embeddings use two deterministic test
+vectors. No real email or embedding requests are made, and no provider keys or
+running worker process are needed. The test exercises retrieval and citation
+wiring, not semantic model quality. It uses FastAPI's in-process TestClient and
+one worker iteration; it does not cover browser UI, deployed networking or
+cross-process queue concurrency. Those boundaries retain their separate tests or
+deployment checks. The existing CI quality job includes this test automatically.
+
 Run lint and formatting verification:
 
 ```bash
