@@ -1528,3 +1528,362 @@ textarea {
   padding-top: 15px;
   margin-top: 25px;
 }
+
+/* Account access shares the workspace's typography and restrained palette. */
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.login-story {
+  background: #173d34;
+  color: #eaf0df;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 70px;
+  padding: 48px 55px;
+}
+.login-story .brand {
+  padding: 0;
+  width: fit-content;
+}
+.login-story .eyebrow {
+  color: #bed0b7;
+  font-size: 10px;
+}
+.login-story h1 {
+  font-size: 76px;
+  margin: 25px 0;
+  line-height: 1.03;
+}
+.login-story h1 em {
+  color: #d7e4b6;
+}
+.login-story p {
+  max-width: 330px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #c9d6c4;
+}
+.login-trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 27px;
+  border-top: 1px solid #59705e;
+  margin-top: 42px;
+  padding-top: 22px;
+  font:
+    10px "IBM Plex Mono",
+    monospace;
+  color: #c6d5bc;
+}
+.login-edition {
+  font:
+    9px "IBM Plex Mono",
+    monospace;
+  color: #c6d5bc;
+  letter-spacing: 1.2px;
+}
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 42px;
+}
+.login-form-wrap {
+  width: 100%;
+  max-width: 370px;
+}
+.login-form-wrap > .eyebrow {
+  font-size: 10px;
+}
+.login-form-wrap h2 {
+  font:
+    52px/1.1 "Instrument Serif",
+    serif;
+  letter-spacing: -0.5px;
+  margin: 20px 0 12px;
+}
+.login-description {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #596d51;
+  margin-bottom: 30px;
+}
+.login-panel form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-panel label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.login-panel input {
+  height: 46px;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #a8b79a;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 15px;
+  background: #fcfdf8;
+}
+.login-panel input:disabled {
+  background: #eef1e6;
+}
+.login-panel form > input {
+  margin-bottom: 12px;
+}
+.password-field {
+  position: relative;
+  margin-bottom: 12px;
+}
+.password-field input {
+  padding-right: 65px;
+}
+.password-field button {
+  position: absolute;
+  right: 7px;
+  top: 6px;
+  height: 34px;
+  padding: 0 10px;
+  color: #416239;
+  font-size: 11px;
+}
+.login-panel form > button {
+  height: 46px;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.login-preview {
+  margin-top: 35px;
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
+  font-size: 12px;
+  color: #637155;
+}
+.login-preview span {
+  display: block;
+  margin-bottom: 10px;
+}
+.login-preview a {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #335d3c;
+}
+.session-notice {
+  padding: 13px 15px;
+  background: #e9efdd;
+  border-left: 2px solid #79935e;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0 0 24px;
+  color: #365a32;
+}
+.api-feedback {
+  border-left: 2px solid #a26844;
+  background: #f3eae1;
+  padding: 12px 15px;
+  color: #714029;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.api-feedback p + p {
+  margin-top: 8px;
+}
+.api-feedback small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+}
+.session-status {
+  max-width: 750px;
+  margin: 0 auto;
+  padding: 15vh 25px 60px;
+}
+.session-status h1 {
+  font-size: 52px;
+}
+.session-status p {
+  font-size: 14px;
+  line-height: 1.8;
+}
+.session-status > .api-feedback {
+  margin: 25px 0 20px;
+}
+.session-status > .text-action {
+  margin-top: 25px;
+}
+.account-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+.account-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  border-bottom: 1px solid var(--line);
+  padding: 25px 45px;
+}
+.account-header .brand {
+  font-size: 22px;
+}
+.account-header .brand-second {
+  font-size: 10px;
+}
+.account-header button {
+  font-size: 12px;
+}
+.account-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1050px;
+  margin: auto;
+  padding: 45px;
+}
+.account-main h1 {
+  font-size: 70px;
+  margin: 35px 0 20px;
+  overflow-wrap: anywhere;
+}
+.account-main > .api-feedback {
+  margin-top: 25px;
+}
+.account-record {
+  border-top: 1px solid var(--line);
+  margin-top: 35px;
+  padding-top: 23px;
+}
+.account-record h2 {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 18px;
+}
+.account-record dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+}
+.account-record dt {
+  font:
+    9px "IBM Plex Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #657455;
+  margin-bottom: 9px;
+}
+.account-record dd {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.account-next {
+  border: 1px solid #d2dcc5;
+  background: #eef2e6;
+  padding: 30px;
+  margin-top: 35px;
+}
+.account-next h2 {
+  font:
+    35px "Instrument Serif",
+    serif;
+  margin: 13px 0;
+}
+.account-next p {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #586e4e;
+  max-width: 650px;
+  margin-bottom: 20px;
+}
+.account-next a {
+  font-size: 12px;
+}
+.sidebar {
+  overflow-y: auto;
+}
+@media (max-width: 1000px) {
+  .login-story {
+    padding: 35px;
+  }
+  .login-story h1 {
+    font-size: 60px;
+  }
+  .login-panel {
+    padding: 50px 30px;
+  }
+  .login-trail {
+    gap: 17px;
+    font-size: 9px;
+  }
+}
+@media (max-width: 720px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+  .login-story {
+    padding: 25px;
+    gap: 30px;
+  }
+  .login-story h1 {
+    font-size: 46px;
+    margin: 15px 0;
+  }
+  .login-story p {
+    font-size: 12px;
+  }
+  .login-story .eyebrow {
+    font-size: 8px;
+  }
+  .login-story .brand {
+    font-size: 22px;
+  }
+  .login-trail,
+  .login-edition {
+    display: none;
+  }
+  .login-panel {
+    padding: 35px 25px 45px;
+  }
+  .login-form-wrap {
+    max-width: 450px;
+  }
+  .login-form-wrap h2 {
+    font-size: 44px;
+  }
+  .login-panel input {
+    font-size: 16px;
+  }
+  .account-header {
+    padding: 20px;
+  }
+  .account-main {
+    padding: 30px 22px;
+  }
+  .account-main h1 {
+    font-size: 52px;
+  }
+  .account-record dl {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .account-next {
+    padding: 23px;
+  }
+  .account-next h2 {
+    font-size: 30px;
+  }
+  .session-status {
+    padding-top: 80px;
+  }
+  .session-status h1 {
+    font-size: 42px;
+  }
+}

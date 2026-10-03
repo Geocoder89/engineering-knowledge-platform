@@ -62,9 +62,9 @@ export function Layout() {
     };
   }, [menuOpen]);
   const location = useLocation();
-  const section = location.pathname.startsWith("/decisions")
+  const section = location.pathname.startsWith("/preview/decisions")
     ? "Decisions"
-    : location.pathname === "/documents"
+    : location.pathname === "/preview/documents"
       ? "Documents"
       : "Search";
   const closeMenu = () => setMenuOpen(false);
@@ -87,7 +87,11 @@ export function Layout() {
         className={`sidebar ${menuOpen ? "is-open" : ""}`}
         aria-label="Workspace navigation"
       >
-        <Link className="brand" to="/decisions/DEC-024" onClick={closeMenu}>
+        <Link
+          className="brand"
+          to="/preview/decisions/DEC-024"
+          onClick={closeMenu}
+        >
           <span className="brand-symbol">
             <Layers size={25} strokeWidth={1.4} />
           </span>
@@ -110,14 +114,14 @@ export function Layout() {
         </div>
         <div className="nav-heading">WORKSPACE</div>
         <nav>
-          <NavLink to="/decisions/DEC-024" onClick={closeMenu}>
+          <NavLink to="/preview/decisions/DEC-024" onClick={closeMenu}>
             <Layers size={17} /> Decisions <span className="nav-count">01</span>
           </NavLink>
-          <NavLink to="/documents" onClick={closeMenu}>
+          <NavLink to="/preview/documents" onClick={closeMenu}>
             <FileText size={17} /> Documents{" "}
             <span className="nav-count">03</span>
           </NavLink>
-          <NavLink to="/search" onClick={closeMenu}>
+          <NavLink to="/preview/search" onClick={closeMenu}>
             <Search size={17} /> Search
           </NavLink>
         </nav>
@@ -131,6 +135,9 @@ export function Layout() {
           <span>From source to rationale.</span>
         </div>
         <div className="sidebar-bottom">
+          <Link className="preview-link" to="/workspace" onClick={closeMenu}>
+            Your account <ArrowUpRight size={13} />
+          </Link>
           <button
             className="preview-link"
             onClick={() => {
@@ -203,9 +210,9 @@ export function Layout() {
             reset when you leave the decision screen or refresh.
           </p>
           <p className="dialog-copy">
-            Authentication, uploads, and live backend data will be connected in
-            the next implementation steps. No documents are uploaded and no
-            embedding requests are made here.
+            This sample workspace uses fictional data. Sign in to access your
+            account. No documents are uploaded and no embedding requests are
+            made here.
           </p>
           <Button onClick={() => setAboutOpen(false)}>
             Explore the workspace <ArrowUpRight size={15} />

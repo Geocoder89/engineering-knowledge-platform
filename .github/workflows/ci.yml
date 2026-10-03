@@ -122,6 +122,27 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-bookworm
+        env:
+          POSTGRES_USER: browser_user
+          POSTGRES_PASSWORD: browser_password
+          POSTGRES_DB: auth_browser_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U browser_user -d auth_browser_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql+psycopg://browser_user:browser_password@localhost:5432/auth_browser_test
+      RUN_BROWSER_AUTH_TESTS: "1"
+      API_PROXY_TARGET: http://127.0.0.1:8001
+      SESSION_COOKIE_SECURE: "false"
+      CSRF_TRUSTED_ORIGINS: '["http://127.0.0.1:5173"]'
+      OPENAI_API_KEY: ""
     defaults:
       run:
         working-directory: frontend
@@ -135,6 +156,18 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python for the live auth fixture
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install API dependencies and migrate the disposable database
+        run: |
+          python -m pip install -r ../requirements.txt
+          cd ..
+          python -m alembic upgrade head
 
       - name: Install frontend dependencies
         run: npm ci

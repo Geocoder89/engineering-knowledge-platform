@@ -37,7 +37,7 @@ test("reviews evidence, edits rationale, finalizes the preview, and resets on re
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await page.goto("/preview");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "Every decision.",
   );
@@ -101,7 +101,7 @@ test("reviews evidence, edits rationale, finalizes the preview, and resets on re
 test("filters documents and searches excerpts with URL-backed navigation", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/preview");
   await navigate(page, "Documents");
   await page.getByRole("button", { name: "Review note", exact: true }).click();
   await expect(page.locator(".document-row")).toHaveCount(1);
@@ -151,7 +151,7 @@ test("filters documents and searches excerpts with URL-backed navigation", async
 test("explains the preview and recovers from unknown routes", async ({
   page,
 }) => {
-  await page.goto("/missing-page");
+  await page.goto("/preview/missing-page");
   await page
     .getByRole("link", { name: "Return to the decision workspace" })
     .click();
