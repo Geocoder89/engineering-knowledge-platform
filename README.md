@@ -4,11 +4,11 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution and creator/finalizer attribution on decision records are also implemented. A React frontend design preview is available in `frontend/`; live frontend integration and additional production hardening remain planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution and creator/finalizer attribution on decision records are also implemented. The React frontend provides session-based login and a protected account workspace. Document and decision screens remain a sample preview; further frontend integration and production hardening are planned.
 
-## Frontend design preview
+## Frontend workspace
 
-The `frontend/` directory contains a responsive, interactive React prototype of the decision workspace, document library, and evidence search. It uses clearly labelled fictional data and does not call the API or embedding provider. Changes reset when leaving the decision screen or refreshing.
+The `frontend/` directory contains real session-based login and a protected account page, plus the responsive decision, document, and search preview under `/preview`.
 
 With Node.js 24 LTS (24.16+ within 24.x) installed:
 
@@ -18,7 +18,9 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. This preview runs independently of the database and containers. See [the frontend guide](frontend/README.md) for the sample walkthrough, Playwright checks, design choices, and planned API integration.
+Open http://127.0.0.1:5173. Login requires the local API, an existing email-verified account, and `http://127.0.0.1:5173` in the backend's `CSRF_TRUSTED_ORIGINS`. Vite forwards `/api/*` to the local API while preserving the browser Origin and cookies. See [the frontend guide](frontend/README.md) for the exact Docker/environment setup and test commands.
+
+The public sample workspace at http://127.0.0.1:5173/preview still works without a backend. Its fictional records are separate from your account and make no embedding requests. Sample changes reset when leaving the decision screen or refreshing. CI checks both the preview and real cookie/CSRF login/logout flows against a disposable PostgreSQL database.
 
 ## Why This Project Exists
 
@@ -249,7 +251,7 @@ Unsafe browser requests using `POST`, `PUT`, `PATCH`, or `DELETE` must include
 an exact trusted `Origin`. Configure trusted origins as a JSON array:
 
 ```env
-CSRF_TRUSTED_ORIGINS='["http://localhost:3000"]'
+CSRF_TRUSTED_ORIGINS='["http://localhost:3000","http://127.0.0.1:5173"]'
 CSRF_COOKIE_NAME=decision_csrf
 ```
 
@@ -691,7 +693,7 @@ Current limitations include:
 - Historical decisions may lack creator or finalizer attribution; unknown identities remain null
 - Local filesystem document storage
 - No hosted deployment configuration
-- Frontend uses sample data; live authentication and API integration are pending
+- Frontend document and decision screens use sample data; live workflow integration and account onboarding screens are pending
 - No operational monitoring or backup strategy
 - No exposed decision-supersession workflow
 

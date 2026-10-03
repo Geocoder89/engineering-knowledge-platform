@@ -36,7 +36,7 @@ export function DocumentLibrary() {
           </p>
         </div>
         <Button asChild variant="outline">
-          <Link to="/search">
+          <Link to="/preview/search">
             Explore the evidence <ArrowUpRight size={16} />
           </Link>
         </Button>
@@ -104,7 +104,7 @@ export function DocumentLibrary() {
             A source becomes useful when you can connect its detail to the
             decision it informed.
           </p>
-          <Link to="/decisions/DEC-024">
+          <Link to="/preview/decisions/DEC-024">
             Follow an example decision <ArrowRight size={15} />
           </Link>
         </div>

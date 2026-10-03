@@ -24,9 +24,22 @@ export default defineConfig({
     },
     { name: "mobile", use: { ...devices["Pixel 7"] } },
   ],
-  webServer: {
-    command: "npm run dev",
-    url: "http://127.0.0.1:5173",
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    ...(process.env.RUN_BROWSER_AUTH_TESTS === "1"
+      ? [
+          {
+            command: "cd .. && python -m scripts.browser_auth_server",
+            url: "http://127.0.0.1:8001/health",
+            reuseExistingServer: false,
+            timeout: 60000,
+          },
+        ]
+      : []),
+    {
+      command: "npm run dev",
+      url: "http://127.0.0.1:5173",
+      reuseExistingServer:
+        !process.env.CI && process.env.RUN_BROWSER_AUTH_TESTS !== "1",
+    },
+  ],
 });
