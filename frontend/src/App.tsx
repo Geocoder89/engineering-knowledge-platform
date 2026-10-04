@@ -13,10 +13,19 @@ import { SessionProvider } from "@/auth/session-provider";
 import { RequireSession } from "@/auth/session-gate";
 import { LoginPage } from "@/pages/login";
 import { WorkspaceHome } from "@/pages/workspace-home";
+import { RegisterPage } from "@/pages/register";
+import { VerifyEmailPage } from "@/pages/verify-email";
+import { ResendVerificationPage } from "@/pages/resend-verification";
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="register" element={<RegisterPage />} />
+        <Route path="verify-email" element={<VerifyEmailPage />} />
+        <Route
+          path="resend-verification"
+          element={<ResendVerificationPage />}
+        />
         <Route
           element={
             <SessionProvider>
