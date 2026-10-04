@@ -16,6 +16,12 @@ import { WorkspaceHome } from "@/pages/workspace-home";
 import { RegisterPage } from "@/pages/register";
 import { VerifyEmailPage } from "@/pages/verify-email";
 import { ResendVerificationPage } from "@/pages/resend-verification";
+import { WorkspaceLayout } from "@/components/workspace-layout";
+import {
+  DecisionListPage,
+  CreateDecisionPage,
+  DecisionRecordPage,
+} from "@/pages/decisions";
 export default function App() {
   return (
     <BrowserRouter>
@@ -36,7 +42,15 @@ export default function App() {
           <Route index element={<Navigate to="/workspace" replace />} />
           <Route path="login" element={<LoginPage />} />
           <Route element={<RequireSession />}>
-            <Route path="workspace" element={<WorkspaceHome />} />
+            <Route path="workspace" element={<WorkspaceLayout />}>
+              <Route index element={<WorkspaceHome />} />
+              <Route path="decisions" element={<DecisionListPage />} />
+              <Route path="decisions/new" element={<CreateDecisionPage />} />
+              <Route
+                path="decisions/:decisionId"
+                element={<DecisionRecordPage />}
+              />
+            </Route>
           </Route>
         </Route>
         <Route path="preview" element={<Layout />}>

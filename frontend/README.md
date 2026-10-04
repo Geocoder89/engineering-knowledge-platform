@@ -1,6 +1,6 @@
 # Decision workspace frontend
 
-The frontend provides account registration, email verification, and real session-based sign-in and an authenticated account workspace, alongside the interactive design preview. Document, decision, and search screens still use fictional sample records under `/preview`.
+The frontend provides account registration, email verification, and real session-based sign-in and an authenticated account workspace, alongside the interactive design preview. Your decision register, draft creation, and saved records are live under `/workspace/decisions`. The broader document, decision-editing, and search demo remains separate under `/preview`.
 
 ## Run locally
 
@@ -46,16 +46,19 @@ The Vite proxy preserves the browser's Origin header and forwards cookies; no br
 
 ## Routes and behavior
 
-| Route                        | Data and access                                                  |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `/register`                  | Create an account and request a verification email               |
-| `/verify-email?token=…`      | Confirm a one-time email verification link                       |
-| `/resend-verification`       | Request a replacement link; generic response                     |
-| `/login`                     | Real login; redirects an existing session to `/workspace`        |
-| `/workspace`                 | Protected account page backed by `GET /users/me`                 |
-| `/preview/decisions/DEC-024` | Public sample alternatives, rationale, finalization, and history |
-| `/preview/documents`         | Public sample document library and source excerpts               |
-| `/preview/search`            | Public local-text search, with queries in the URL                |
+| Route                              | Data and access                                                  |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| `/register`                        | Create an account and request a verification email               |
+| `/verify-email?token=…`            | Confirm a one-time email verification link                       |
+| `/resend-verification`             | Request a replacement link; generic response                     |
+| `/login`                           | Real login; redirects an existing session to `/workspace`        |
+| `/workspace/decisions`             | Your saved decisions, paginated 20 at a time                     |
+| `/workspace/decisions/new`         | Create a real draft with a title and question                    |
+| `/workspace/decisions/:decisionId` | Read the assembled saved record                                  |
+| `/workspace`                       | Protected account page backed by `GET /users/me`                 |
+| `/preview/decisions/DEC-024`       | Public sample alternatives, rationale, finalization, and history |
+| `/preview/documents`               | Public sample document library and source excerpts               |
+| `/preview/search`                  | Public local-text search, with queries in the URL                |
 
 - Login uses `POST /auth/login` through `/api`, then verifies cookie acceptance with `GET /users/me`.
 - Logout uses `POST /auth/logout` and the current CSRF cookie in `X-CSRF-Token`. The frontend only confirms logout when the server request succeeds; failures offer a retry.
@@ -88,7 +91,7 @@ npm run test:e2e
 
 Desktop and mobile Playwright tests cover login, refresh, expiry, logout/CSRF headers, cross-tab logout, stale responses, unavailable services, safe errors, and the preview interactions. Axe checks and overflow assertions cover the main account and sample screens. Most tests intercept API responses to exercise failure cases deterministically.
 
-**CI also runs real browser-to-API tests:** a disposable PostgreSQL database is migrated, and `scripts/browser_auth_server.py` seeds verified fixture users using the existing registration and verification services. Playwright logs in through Vite and the real FastAPI routes, checks HttpOnly cookie behavior and refresh, verifies invalid CSRF/Origin rejection, and checks database session revocation by replaying the old cookie after logout. The onboarding flow registers an unverified user, rejects premature login, resends through a local file mailbox, rejects the superseded link, verifies the new link, rejects token reuse, and signs in/out. Only the email transport is replaced; routes, rate limits, token validation, and database transactions are real. No mail or embedding provider is called. This fixture requires explicit opt-in and a database name ending in `_browser_test`; it is not a development-account creation command for your normal database. Locally, those four tests are skipped unless that dedicated fixture environment is configured.
+**CI also runs real browser-to-API tests:** a disposable PostgreSQL database is migrated, and `scripts/browser_auth_server.py` seeds verified fixture users using the existing registration and verification services. Playwright logs in through Vite and the real FastAPI routes, checks HttpOnly cookie behavior and refresh, verifies invalid CSRF/Origin rejection, and checks database session revocation by replaying the old cookie after logout. The onboarding flow registers an unverified user, rejects premature login, resends through a local file mailbox, rejects the superseded link, verifies the new link, rejects token reuse, and signs in/out. Only the email transport is replaced; routes, rate limits, token validation, and database transactions are real. No mail or embedding provider is called. This fixture requires explicit opt-in and a database name ending in `_browser_test`; it is not a development-account creation command for your normal database. A separate two-account decision flow creates a real draft, reloads its record/list, and checks that another account cannot list or open it. Locally, those six tests are skipped unless that dedicated fixture environment is configured.
 
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can point to an existing local Chromium when the normal download is unavailable. Failure diagnostics are written to ignored directories and uploaded by CI for three days.
 
@@ -189,8 +192,39 @@ Run Vite against port 8000, register using an inbox you control, and open the ac
 
 Verification uses an explicit confirmation button rather than an automatic POST on page load. The token is removed from the URL before React mounts and is not saved in localStorage, sessionStorage, or router history. A no-referrer policy prevents sending the link in outgoing referrers. The initial email URL still reaches the frontend server: configure any deployment proxy/access logs to omit query strings for this route.
 
+## Test live decisions
+
+Use your normal API on port 8000 and an existing verified account. If Vite was pointed at the onboarding fixture, stop it and restart against the normal API:
+
+```bash
+cd frontend
+API_PROXY_TARGET=http://127.0.0.1:8000 npm run dev
+```
+
+1. Sign in, select **Decisions** in the header (or **Open your decisions** on the account page).
+2. An account with no decisions shows an empty state. Select **New decision**, enter a title (3–200 characters) and question (10–2,000), then **Save decision**.
+3. Expect the saved record with status **Draft**, your exact question, creation/update timestamps, creator user ID, and audit-event count. New drafts correctly have no alternatives or rationale yet.
+4. Refresh the record and return to **All decisions**. Your decision must persist in both views. Copy the record URL.
+5. Sign out and sign in as another verified account, preferably in a private browser window. The first account's decision must be absent from the register; its copied URL must show **Decision unavailable**. The API returns the same 404 for missing and other-user records.
+6. To check error recovery, stop the API while staying signed in and open Decisions or a saved record. Expect a recoverable error and **Try again**. Restart the API and retry. If the session check itself fails, use its reconnect action first. Creation errors preserve form fields; after a lost response, check your register before retrying, because the server may already have saved the draft.
+
+Pagination uses `?offset=20` and a fixed page size of 20, with Previous/Next controls. There is no client-side search or filter pretending to search the entire register. Detail reads use the assembled `/decisions/{id}/record` endpoint and display existing alternatives, evidence excerpts/citations, rationale, status, attribution, and lifecycle dates. Audit history is represented by its event count in this slice. No upload or embedding request occurs during listing, creation, or record viewing.
+
+Alternatives, evidence, and review actions in these saved records are read-only in this slice; their editing UI comes next. The fictional `/preview` stays independent from account data. Decision responses are kept in component memory and discarded when signing out or switching users. Requests are cancelled when leaving a page, and previous-page data is hidden while a new page loads. Session expiry redirects to login and then returns to the requested workspace route after successful sign-in.
+
+Run the browser checks from `frontend`:
+
+```bash
+npm run lint
+npm run format:check
+npm run build
+npm run test:e2e
+```
+
+The existing [disposable test setup](#free-local-test-with-a-disposable-database) also supports the real decision tests. Start and migrate its fresh database, keep the test environment exports, stop manually started Vite/fixture servers, then run `API_PROXY_TARGET=http://127.0.0.1:8001 npm run test:e2e`. Playwright starts both servers. The fixture seeds separate decision-owner and other-user accounts for each browser project; no real mail or embedding call is made.
+
 ## Next integration steps
 
-Connect the decision list and assembled records, document upload/processing, semantic search, evidence editing, and audit history. Add server loading/error/empty states as each workflow becomes live.
+Connect alternative editing, document upload/processing, semantic search, evidence editing, review/finalization, and detailed audit history. Add server loading/error/empty states as each workflow becomes live.
 
 Hosting and demo usage controls remain separate work. `npm run preview` only serves the static build; it is not the supported API proxy setup. A production reverse proxy must route `/api/*` to FastAPI with `/api` stripped, preserve the original browser Origin, and serve `index.html` for frontend routes. Keep the session and CSRF cookies on the same origin with HTTPS and secure cookies.
