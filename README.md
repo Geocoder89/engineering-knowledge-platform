@@ -291,6 +291,8 @@ EMAIL_VERIFICATION_URL
 email. It is not the backend `/auth/verify-email` endpoint. The raw verification
 token is added as a `token` query parameter.
 
+The frontend now provides `/register`, `/verify-email`, and `/resend-verification`. For local delivery, use `EMAIL_VERIFICATION_URL=http://127.0.0.1:5173/verify-email`. See [frontend onboarding tests](frontend/README.md#test-account-onboarding) for a disposable, no-email local test and real delivery instructions.
+
 `EMAIL_DELIVERY_TIMEOUT_SECONDS` controls the outbound Resend request timeout
 and defaults to 10 seconds.
 

@@ -1887,3 +1887,47 @@ textarea {
     font-size: 42px;
   }
 }
+
+.auth-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 24px;
+  font-size: 13px;
+}
+.auth-links a,
+.auth-links button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #335d3c;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.auth-success {
+  color: #365a32;
+  padding: 22px;
+  background: #e9efdd;
+  border-left: 2px solid #79935e;
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.auth-success p {
+  margin-top: 12px;
+}
+.field-help {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #596d51;
+}
+.verification-note {
+  margin-bottom: 24px;
+}
+.verification-button {
+  width: 100%;
+  justify-content: space-between;
+  margin-top: 20px;
+  min-height: 46px;
+}

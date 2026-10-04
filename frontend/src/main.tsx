@@ -9,6 +9,8 @@ import "@fontsource/ibm-plex-mono/latin-400.css";
 import "./index.css";
 import "./workspace.css";
 import App from "./App";
+import { captureVerificationLink } from "./lib/verification-link";
+captureVerificationLink();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

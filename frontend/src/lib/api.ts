@@ -58,6 +58,8 @@ export async function apiRequest<T>(
     body?: unknown;
     signal?: AbortSignal;
     sessionRequired?: boolean;
+    expectedStatus?: number;
+    responseType?: "json" | "empty";
   } = {},
 ): Promise<T> {
   if (!path.startsWith("/") || path.startsWith("//"))
@@ -124,7 +126,14 @@ export async function apiRequest<T>(
       reason,
     );
   }
-  if (response.status === 204) return undefined as T;
+  if (options.expectedStatus && response.status !== options.expectedStatus)
+    throw new ApiError(
+      "The service returned an unexpected response. Please try again.",
+      response.status,
+      requestId,
+    );
+  if (response.status === 204 || options.responseType === "empty")
+    return undefined as T;
   if (!response.headers.get("Content-Type")?.includes("application/json"))
     throw new ApiError(
       "The service returned an unexpected response. Please try again.",
