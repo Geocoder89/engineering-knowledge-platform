@@ -35,6 +35,9 @@ test("real registration, resend, one-time verification, login and logout", async
   const originalLink = await capturedLink(email);
 
   await page.getByRole("link", { name: "Go to sign in" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Welcome back." }),
+  ).toBeVisible();
   await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -43,6 +46,11 @@ test("real registration, resend, one-time verification, login and logout", async
   );
 
   await page.getByRole("link", { name: "Resend verification email" }).click();
+  // Both routes have an Email address input: wait for the destination before filling.
+  await expect(page).toHaveURL(/\/resend-verification$/);
+  await expect(
+    page.getByRole("heading", { name: "A fresh link." }),
+  ).toBeVisible();
   await page.getByLabel("Email address").fill(email);
   await page.getByRole("button", { name: "Send verification link" }).click();
   await expect(page.getByRole("status")).toContainText("If this email belongs");
@@ -67,6 +75,9 @@ test("real registration, resend, one-time verification, login and logout", async
     "invalid, expired, or already used",
   );
   await page.getByRole("link", { name: "Go to sign in" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Welcome back." }),
+  ).toBeVisible();
   await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
