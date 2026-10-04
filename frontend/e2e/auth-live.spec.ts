@@ -60,4 +60,20 @@ test("real API login, cookie restoration, CSRF rejection, and session revocation
       (cookie) => cookie.name === "decision_session",
     ),
   ).toBe(false);
+
+  // Both documented local addresses must work with real browser Origin headers.
+  await page.goto("http://localhost:5173/login");
+  await page
+    .getByLabel("Email address")
+    .fill(`browser-${testInfo.project.name}@example.test`);
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("Browser-only-fixture-password-2026");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL("http://localhost:5173/workspace");
+  await expect(
+    page.getByRole("heading", { name: "Your account", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page).toHaveURL("http://localhost:5173/login");
 });

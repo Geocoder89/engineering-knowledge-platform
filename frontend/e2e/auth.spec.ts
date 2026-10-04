@@ -186,7 +186,7 @@ test("keeps the session on a failed logout and allows retry", async ({
   state.logoutStatus = 403;
   await page.goto("/workspace");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("could not be verified");
+  await expect(page.getByRole("alert")).toContainText("do not have permission");
   await expect(page.getByText(user.email, { exact: true })).toBeVisible();
   state.logoutStatus = 204;
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -281,3 +281,55 @@ test("a delayed session check cannot restore an account after logout", async ({
   );
   await expect(page.getByText(user.email, { exact: true })).not.toBeVisible();
 });
+
+for (const scenario of [
+  {
+    name: "untrusted origin",
+    detail: "Request origin is not allowed",
+    message: "This app address is not allowed",
+    guidance: true,
+  },
+  {
+    name: "invalid CSRF token",
+    detail: "CSRF token is invalid",
+    message: "Your browser security token is missing",
+    guidance: false,
+  },
+  {
+    name: "unknown forbidden response",
+    detail: "INTERNAL_PRIVATE_DIAGNOSTIC",
+    message: "You do not have permission",
+    guidance: false,
+  },
+]) {
+  test(`explains ${scenario.name} without exposing raw server details`, async ({
+    page,
+  }) => {
+    await mockSession(page);
+    await page.route("**/api/auth/login", (route) =>
+      route.fulfill({
+        status: 403,
+        json: { detail: scenario.detail },
+        headers: { "X-Request-ID": "forbidden-request", "Retry-After": "120" },
+      }),
+    );
+    await page.goto("/login");
+    await signIn(page);
+    const feedback = page.getByRole("alert");
+    await expect(feedback).toContainText(scenario.message);
+    await expect(feedback).toContainText("forbidden-request");
+    await expect(feedback).not.toContainText("INTERNAL_PRIVATE_DIAGNOSTIC");
+    await expect(feedback).not.toContainText("Try again in about");
+    if (scenario.guidance) {
+      await expect(feedback).toContainText("http://127.0.0.1:5173");
+      await expect(feedback).toContainText("CSRF_TRUSTED_ORIGINS");
+      await expect(feedback).toContainText(
+        "docker compose up -d --wait --force-recreate api",
+      );
+    } else {
+      await expect(feedback).not.toContainText("CSRF_TRUSTED_ORIGINS");
+    }
+    await expect(page).toHaveURL(/\/login$/);
+    await accessible(page);
+  });
+}

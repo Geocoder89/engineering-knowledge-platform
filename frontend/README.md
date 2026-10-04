@@ -24,11 +24,11 @@ Use an existing **email-verified account**. Registration, verification, and pass
    ```dotenv
    SESSION_COOKIE_SECURE=false
    SESSION_COOKIE_SAMESITE=lax
-   CSRF_TRUSTED_ORIGINS='["http://localhost:3000","http://127.0.0.1:5173"]'
+   CSRF_TRUSTED_ORIGINS='["http://localhost:3000","http://127.0.0.1:5173","http://localhost:5173"]'
    CSRF_COOKIE_NAME=decision_csrf
    ```
 
-   Preserve any additional trusted origins you already need. The scheme, hostname, and port must match exactly. Use `127.0.0.1:5173` consistently; `localhost:5173` is a different origin. Use secure cookies and HTTPS when deploying publicly.
+   Preserve any additional trusted origins you already need. The scheme, hostname, and port must match exactly. The example allows both `127.0.0.1:5173` and `localhost:5173`. They are different origins with separate cookie storage; sign in again when switching between them. Updating `.env.example` does not update your existing `.env`. Use secure cookies and HTTPS when deploying publicly.
 
 2. Restart the API so it reads the updated settings. For the existing Docker setup, run from the repository root:
 
@@ -42,7 +42,7 @@ Use an existing **email-verified account**. Registration, verification, and pass
 
 4. Sign in at http://127.0.0.1:5173/login. The account page should show your real display name and email. Refresh to confirm the session is restored, then sign out. Returning to `/workspace` should require login again.
 
-The Vite proxy preserves the browser's Origin header and forwards cookies; no browser CORS configuration is required for this setup. It does not manufacture a trusted Origin or disable the backend's CSRF checks. A `403` on login usually means the frontend origin was not included in the backend settings or the API was not restarted. A `401` means the credentials, account status, or email verification did not satisfy the backend. If login succeeds but the session check fails, check cookie acceptance and your HTTP/HTTPS cookie settings.
+The Vite proxy preserves the browser's Origin header and forwards cookies; no browser CORS configuration is required for this setup. It does not manufacture a trusted Origin or disable the backend's CSRF checks. A rejected origin now has a specific error message and, in development, instructions containing the exact current origin. Other permission and CSRF errors have separate messages; unknown server details are never displayed. A `403` on login usually means the frontend origin was not included in the backend settings or the API was not restarted. A `401` means the credentials, account status, or email verification did not satisfy the backend. If login succeeds but the session check fails, check cookie acceptance and your HTTP/HTTPS cookie settings.
 
 ## Routes and behavior
 

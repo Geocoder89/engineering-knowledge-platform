@@ -1,8 +1,11 @@
 export const SESSION_EXPIRED_EVENT = "decision:session-expired";
 const csrfCookieName = import.meta.env.VITE_CSRF_COOKIE_NAME || "decision_csrf";
 
+export type ForbiddenReason = "untrusted-origin" | "invalid-csrf" | null;
+
 export class ApiError extends Error {
   readonly status: number;
+  readonly forbiddenReason: ForbiddenReason;
   readonly requestId: string | null;
   readonly retryAfter: number | null;
   constructor(
@@ -10,10 +13,12 @@ export class ApiError extends Error {
     status = 0,
     requestId: string | null = null,
     retryAfter: number | null = null,
+    forbiddenReason: ForbiddenReason = null,
   ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.forbiddenReason = forbiddenReason;
     this.requestId = requestId;
     this.retryAfter = retryAfter;
   }
@@ -31,10 +36,14 @@ function csrfToken(): string | undefined {
   }
 }
 
-function failureMessage(status: number): string {
+function failureMessage(status: number, reason: ForbiddenReason): string {
+  if (reason === "untrusted-origin")
+    return "This app address is not allowed to contact the service. Use the configured app address or contact the administrator.";
+  if (reason === "invalid-csrf")
+    return "Your browser security token is missing or no longer valid. Clear this app’s cookies and sign in again.";
   if (status === 401) return "Your session has ended. Please sign in again.";
   if (status === 403)
-    return "This request could not be verified. Refresh the page and try again.";
+    return "You do not have permission to complete this request. Contact the administrator if you need access.";
   if (status === 429)
     return "Too many attempts. Please wait before trying again.";
   if (status === 422) return "Please check the information you entered.";
@@ -87,12 +96,32 @@ export async function apiRequest<T>(
   if (!response.ok) {
     if (response.status === 401 && options.sessionRequired !== false)
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    // Recognize only these public middleware responses; never echo arbitrary details.
+    let reason: ForbiddenReason = null;
+    if (
+      response.status === 403 &&
+      response.headers.get("Content-Type")?.includes("application/json")
+    ) {
+      try {
+        const body: unknown = await response.json();
+        if (body && typeof body === "object" && "detail" in body) {
+          if (body.detail === "Request origin is not allowed")
+            reason = "untrusted-origin";
+          if (body.detail === "CSRF token is invalid") reason = "invalid-csrf";
+        }
+      } catch {
+        /* An unreadable error body uses the safe status-based fallback. */
+      }
+    }
     const seconds = Number(response.headers.get("Retry-After"));
     throw new ApiError(
-      failureMessage(response.status),
+      failureMessage(response.status, reason),
       response.status,
       requestId,
-      Number.isFinite(seconds) && seconds > 0 ? seconds : null,
+      response.status === 429 && Number.isFinite(seconds) && seconds > 0
+        ? seconds
+        : null,
+      reason,
     );
   }
   if (response.status === 204) return undefined as T;

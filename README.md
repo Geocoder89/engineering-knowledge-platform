@@ -251,7 +251,7 @@ Unsafe browser requests using `POST`, `PUT`, `PATCH`, or `DELETE` must include
 an exact trusted `Origin`. Configure trusted origins as a JSON array:
 
 ```env
-CSRF_TRUSTED_ORIGINS='["http://localhost:3000","http://127.0.0.1:5173"]'
+CSRF_TRUSTED_ORIGINS='["http://localhost:3000","http://127.0.0.1:5173","http://localhost:5173"]'
 CSRF_COOKIE_NAME=decision_csrf
 ```
 
