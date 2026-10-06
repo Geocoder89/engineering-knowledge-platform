@@ -46,5 +46,5 @@ export function RequireSession() {
         state={{ from: location.pathname + location.search + location.hash }}
       />
     );
-  return <Outlet />;
+  return <Outlet key={session.user.id} />;
 }

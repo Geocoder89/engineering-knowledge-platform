@@ -14,10 +14,10 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  // Only known internal destinations are accepted; URLs cannot become redirects.
+  // Only workspace-relative destinations are accepted; external redirects are rejected.
   const from: unknown = location.state?.from;
   const destination =
-    typeof from === "string" && /^\/workspace(?:[?#]|$)/.test(from)
+    typeof from === "string" && /^\/workspace(?:\/|[?#]|$)/.test(from)
       ? from
       : "/workspace";
   if (session.status === "loading" || session.status === "unavailable")

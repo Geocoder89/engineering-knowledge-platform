@@ -88,14 +88,21 @@ def main() -> None:
     sender = FileEmailVerificationSender()
     app.dependency_overrides[provide_email_verification_sender] = lambda: sender
     with SessionLocal() as session:
-        for viewport in ("desktop", "mobile"):
-            email = f"browser-{viewport}@example.test"
+        fixture_users = [
+            (f"browser-{viewport}@example.test", f"Browser {viewport.title()}")
+            for viewport in ("desktop", "mobile")
+        ] + [
+            (f"decisions-{role}-{viewport}@example.test", f"Decision {role.title()}")
+            for viewport in ("desktop", "mobile")
+            for role in ("owner", "other")
+        ]
+        for email, display_name in fixture_users:
             if get_user_by_email(session, email=email) is not None:
                 continue
             registration = register_user(
                 session,
                 email=email,
-                display_name=f"Browser {viewport.title()}",
+                display_name=display_name,
                 password="Browser-only-fixture-password-2026",
             )
             verify_email(
