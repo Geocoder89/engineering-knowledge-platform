@@ -4,11 +4,11 @@ An API-first backend for converting engineering source documents into searchable
 
 The platform ingests and versions documents, processes their contents asynchronously, supports semantic search with citations, and connects relevant document evidence to structured engineering decisions. Each decision preserves its alternatives, review outcome, evidence provenance, and immutable audit history.
 
-> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution and creator/finalizer attribution on decision records are also implemented. The React frontend provides session-based login and a protected account workspace. Document and decision screens remain a sample preview; further frontend integration and production hardening are planned.
+> Current status: Stage 10 user identity, password-based registration/login, server-side session authentication, email verification, authentication rate limiting, CSRF/Origin protection, authenticated document ownership, owner-scoped semantic search, decision ownership across reads and writes, and cross-resource evidence authorization are implemented. Decision audit actor attribution and creator/finalizer attribution on decision records are also implemented. The React frontend provides registration/email verification, session-based login, a protected decision register, draft creation, saved records, and draft alternative editing. Document, search, evidence-editing, and review integration and production hardening are planned.
 
 ## Frontend workspace
 
-The `frontend/` directory contains real session-based login and a protected account page, plus the responsive decision, document, and search preview under `/preview`.
+The `frontend/` directory contains real account onboarding and session-based login, a protected decision register, draft creation, saved records, and draft alternative editing. The responsive sample decision, document, and search preview remains under `/preview`. See [testing draft alternatives](frontend/README.md#test-draft-alternatives) for the current end-to-end test flow.
 
 With Node.js 24 LTS (24.16+ within 24.x) installed:
 
@@ -695,7 +695,7 @@ Current limitations include:
 - Historical decisions may lack creator or finalizer attribution; unknown identities remain null
 - Local filesystem document storage
 - No hosted deployment configuration
-- Frontend document and decision screens use sample data; live workflow integration and account onboarding screens are pending
+- Live frontend document upload/search, evidence editing, review transitions, and detailed audit-history browsing remain pending; onboarding, decision records, and draft alternative editing are integrated
 - No operational monitoring or backup strategy
 - No exposed decision-supersession workflow
 

@@ -35,7 +35,7 @@ type Evidence = {
     page_number: number;
   };
 };
-type Alternative = {
+export type Alternative = {
   id: string;
   title: string;
   description: string;
