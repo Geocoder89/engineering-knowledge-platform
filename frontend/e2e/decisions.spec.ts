@@ -225,7 +225,7 @@ test("existing outcome, evidence and unknown historical attribution are rendered
             id: alternativeId,
             title: "Reduce pressure",
             description: "Lower the approved maximum pressure.",
-            position: 1,
+            position: 0,
             evidence: [
               {
                 id: "97cd9e2e-c626-450e-9f00-7b3c89b3ecb2",

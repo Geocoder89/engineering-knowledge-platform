@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, ArrowRight, FileText, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DecisionAlternatives } from "@/components/decision-alternatives";
 import { ApiFeedback } from "@/components/api-feedback";
 import { useAuthAction } from "@/auth/use-auth-action";
 import { apiRequest, type ApiError } from "@/lib/api";
@@ -260,6 +261,9 @@ export function CreateDecisionPage() {
 
 export function DecisionRecordPage() {
   const { decisionId } = useParams();
+  const [notice, setNotice] = useState<{ id: string; message: string } | null>(
+    null,
+  );
   const valid = isUuid(decisionId);
   const { resource, retry } = useApiResource(
     valid ? `/decisions/${decisionId}/record` : null,
@@ -289,6 +293,11 @@ export function DecisionRecordPage() {
       ) : resource.status === "error" ? (
         <>
           <h1>Let’s reload the record.</h1>
+          {notice?.id === decisionId && (
+            <p role="status">
+              {notice.message} Reload the record to see the latest version.
+            </p>
+          )}
           <LoadFailure error={resource.error} retry={retry} />
         </>
       ) : (
@@ -307,58 +316,19 @@ export function DecisionRecordPage() {
           </section>
           <div className="record-columns">
             <div>
-              <section
-                className="live-record-section"
-                aria-labelledby="alternatives-heading"
-              >
-                <div className="record-section-heading">
-                  <h2 id="alternatives-heading">Alternatives</h2>
-                  <span>{resource.data.alternatives.length}</span>
-                </div>
-                {resource.data.alternatives.length === 0 ? (
-                  <p className="record-empty-note">
-                    No alternatives have been added to this decision yet.
-                  </p>
-                ) : (
-                  resource.data.alternatives.map((alternative) => (
-                    <article className="saved-alternative" key={alternative.id}>
-                      <div className="eyebrow">
-                        ALTERNATIVE {alternative.position}
-                        {resource.data.selected_alternative_id ===
-                          alternative.id && " · SELECTED"}
-                      </div>
-                      <h3>{alternative.title}</h3>
-                      <p>{alternative.description}</p>
-                      {alternative.evidence.length === 0 ? (
-                        <p className="field-help">No linked evidence.</p>
-                      ) : (
-                        <ul className="saved-evidence">
-                          {alternative.evidence.map((evidence) => (
-                            <li key={evidence.id}>
-                              <span className="eyebrow">
-                                {evidence.evidence_type === "supporting"
-                                  ? "SUPPORTING"
-                                  : "OPPOSING"}{" "}
-                                EVIDENCE
-                              </span>
-                              <blockquote>{evidence.text}</blockquote>
-                              <p className="evidence-source">
-                                {evidence.citation.document_title} ·{" "}
-                                {evidence.citation.file_name} · Version{" "}
-                                {evidence.citation.version_number}, page{" "}
-                                {evidence.citation.page_number}
-                              </p>
-                              {evidence.relevance_note && (
-                                <p>{evidence.relevance_note}</p>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </article>
-                  ))
-                )}
-              </section>
+              <DecisionAlternatives
+                key={resource.data.id}
+                record={resource.data}
+                notice={notice?.id === resource.data.id ? notice.message : null}
+                onChanged={(message) => {
+                  setNotice({ id: resource.data.id, message });
+                  retry();
+                }}
+                onReload={() => {
+                  setNotice(null);
+                  retry();
+                }}
+              />
               <section
                 className="live-record-section"
                 aria-labelledby="outcome-heading"
@@ -376,8 +346,7 @@ export function DecisionRecordPage() {
                 </p>
               </section>
               <p className="record-scope-note">
-                This view shows the saved record. Editing alternatives,
-                evidence, and review actions will be available in a later
+                Evidence linking and review actions will be available in a later
                 update.
               </p>
             </div>

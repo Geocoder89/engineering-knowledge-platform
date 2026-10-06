@@ -2292,3 +2292,67 @@ textarea {
     flex-wrap: wrap;
   }
 }
+
+.alternative-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 18px;
+}
+.alternative-editor {
+  padding: 24px;
+  background: #edf1e4;
+  border-left: 3px solid #52654c;
+  margin: 24px 0;
+  max-width: none;
+}
+.alternative-editor h3 {
+  font:
+    26px "Instrument Serif",
+    serif;
+  margin: 0 0 12px;
+}
+.alternative-editor p {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.alternative-editor .decision-form-actions {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.alternative-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.alternative-notice {
+  margin-top: 16px;
+  color: #285533;
+  font-size: 14px;
+}
+.alternative-remove {
+  background: #863c2a;
+  color: #fff;
+}
+.alternative-remove:hover {
+  background: #6e2f20;
+}
+.alternative-recovery {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .alternative-editor {
+    padding: 16px;
+  }
+}
+.alternative-editor button:disabled {
+  background: #d4ddc9;
+  color: #40533c;
+  opacity: 1;
+}

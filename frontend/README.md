@@ -1,6 +1,6 @@
 # Decision workspace frontend
 
-The frontend provides account registration, email verification, and real session-based sign-in and an authenticated account workspace, alongside the interactive design preview. Your decision register, draft creation, and saved records are live under `/workspace/decisions`. The broader document, decision-editing, and search demo remains separate under `/preview`.
+The frontend provides account registration, email verification, and real session-based sign-in and an authenticated account workspace, alongside the interactive design preview. Your decision register, draft creation, alternative editing, and saved records are live under `/workspace/decisions`. The broader document, evidence, review, and search demo remains separate under `/preview`.
 
 ## Run locally
 
@@ -54,7 +54,7 @@ The Vite proxy preserves the browser's Origin header and forwards cookies; no br
 | `/login`                           | Real login; redirects an existing session to `/workspace`        |
 | `/workspace/decisions`             | Your saved decisions, paginated 20 at a time                     |
 | `/workspace/decisions/new`         | Create a real draft with a title and question                    |
-| `/workspace/decisions/:decisionId` | Read the assembled saved record                                  |
+| `/workspace/decisions/:decisionId` | Read the saved record; edit draft alternatives                   |
 | `/workspace`                       | Protected account page backed by `GET /users/me`                 |
 | `/preview/decisions/DEC-024`       | Public sample alternatives, rationale, finalization, and history |
 | `/preview/documents`               | Public sample document library and source excerpts               |
@@ -91,7 +91,7 @@ npm run test:e2e
 
 Desktop and mobile Playwright tests cover login, refresh, expiry, logout/CSRF headers, cross-tab logout, stale responses, unavailable services, safe errors, and the preview interactions. Axe checks and overflow assertions cover the main account and sample screens. Most tests intercept API responses to exercise failure cases deterministically.
 
-**CI also runs real browser-to-API tests:** a disposable PostgreSQL database is migrated, and `scripts/browser_auth_server.py` seeds verified fixture users using the existing registration and verification services. Playwright logs in through Vite and the real FastAPI routes, checks HttpOnly cookie behavior and refresh, verifies invalid CSRF/Origin rejection, and checks database session revocation by replaying the old cookie after logout. The onboarding flow registers an unverified user, rejects premature login, resends through a local file mailbox, rejects the superseded link, verifies the new link, rejects token reuse, and signs in/out. Only the email transport is replaced; routes, rate limits, token validation, and database transactions are real. No mail or embedding provider is called. This fixture requires explicit opt-in and a database name ending in `_browser_test`; it is not a development-account creation command for your normal database. A separate two-account decision flow creates a real draft, reloads its record/list, and checks that another account cannot list or open it. Locally, those six tests are skipped unless that dedicated fixture environment is configured.
+**CI also runs real browser-to-API tests:** a disposable PostgreSQL database is migrated, and `scripts/browser_auth_server.py` seeds verified fixture users using the existing registration and verification services. Playwright logs in through Vite and the real FastAPI routes, checks HttpOnly cookie behavior and refresh, verifies invalid CSRF/Origin rejection, and checks database session revocation by replaying the old cookie after logout. The onboarding flow registers an unverified user, rejects premature login, resends through a local file mailbox, rejects the superseded link, verifies the new link, rejects token reuse, and signs in/out. Only the email transport is replaced; routes, rate limits, token validation, and database transactions are real. No mail or embedding provider is called. This fixture requires explicit opt-in and a database name ending in `_browser_test`; it is not a development-account creation command for your normal database. A separate two-account decision flow creates a real draft, adds/edits/removes alternatives, reloads its record/list, verifies attributed audit events, and checks that another account cannot list, open, or mutate it. Locally, those six tests are skipped unless that dedicated fixture environment is configured.
 
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can point to an existing local Chromium when the normal download is unavailable. Failure diagnostics are written to ignored directories and uploaded by CI for three days.
 
@@ -194,7 +194,7 @@ Verification uses an explicit confirmation button rather than an automatic POST 
 
 ## Test live decisions
 
-Use your normal API on port 8000 and an existing verified account. If Vite was pointed at the onboarding fixture, stop it and restart against the normal API:
+Use either your normal API on port 8000 with an existing verified account, or the [free captured-email setup](#free-local-test-with-a-disposable-database) on port 8001. Keep using port 8001 if you just registered in that test environment: the two backends use different databases and accounts. To explicitly use your normal API:
 
 ```bash
 cd frontend
@@ -210,7 +210,7 @@ API_PROXY_TARGET=http://127.0.0.1:8000 npm run dev
 
 Pagination uses `?offset=20` and a fixed page size of 20, with Previous/Next controls. There is no client-side search or filter pretending to search the entire register. Detail reads use the assembled `/decisions/{id}/record` endpoint and display existing alternatives, evidence excerpts/citations, rationale, status, attribution, and lifecycle dates. Audit history is represented by its event count in this slice. No upload or embedding request occurs during listing, creation, or record viewing.
 
-Alternatives, evidence, and review actions in these saved records are read-only in this slice; their editing UI comes next. The fictional `/preview` stays independent from account data. Decision responses are kept in component memory and discarded when signing out or switching users. Requests are cancelled when leaving a page, and previous-page data is hidden while a new page loads. Session expiry redirects to login and then returns to the requested workspace route after successful sign-in.
+Draft alternatives can now be added, edited, and removed. Evidence and review actions remain read-only in these saved records. The fictional `/preview` stays independent from account data. Decision responses are kept in component memory and discarded when signing out or switching users. Requests are cancelled when leaving a page, and previous-page data is hidden while a new page loads. Session expiry redirects to login and then returns to the requested workspace route after successful sign-in.
 
 Run the browser checks from `frontend`:
 
@@ -223,8 +223,30 @@ npm run test:e2e
 
 The existing [disposable test setup](#free-local-test-with-a-disposable-database) also supports the real decision tests. Start and migrate its fresh database, keep the test environment exports, stop manually started Vite/fixture servers, then run `API_PROXY_TARGET=http://127.0.0.1:8001 npm run test:e2e`. Playwright starts both servers. The fixture seeds separate decision-owner and other-user accounts for each browser project; no real mail or embedding call is made.
 
+## Test draft alternatives
+
+After signing in to the same backend where you created your account:
+
+1. Create or open a **Draft** decision and select **Add alternative**. Enter a title (3–200 characters) and description (10–4,000), then select **Save alternative**. Surrounding spaces are trimmed. An all-space title should show validation without making a request.
+2. Add a second option. Both should appear in order, numbered from 1. Refresh the page: both must remain, and the audit-event count should include both additions.
+3. Select **Edit alternative** on the first option. Change its title and save. Refresh and verify the new title and unchanged description. Opening edit and cancelling must leave the saved values unchanged.
+4. Select **Remove alternative**. Read the confirmation: removing an option also removes its linked evidence from the decision, but preserves source documents. **Cancel** must keep it. **Confirm removal** must remove it and refresh the remaining numbering and audit count.
+5. Open a decision already in review, decided, cancelled, or superseded, if you have one. Alternatives remain readable; editing controls are absent. If a draft changes status in another tab, the server rejects a subsequent edit and the form offers **Reload saved record**.
+6. Stop the connected API while an editor is open and try saving. Text stays available; an uncertain result requires checking the saved record before another write. Restart the API and select **Reload saved record**. Copy any text you want to keep first: reloading clears the editor. The app never automatically repeats a mutation.
+7. In a private browser window, sign in as a second verified user in the same backend. The copied decision URL must remain unavailable. The live browser test also checks that direct create/edit/delete alternative requests from this second account return 404.
+
+Successful mutations reload the assembled record rather than assuming an order or audit count. If that read fails after a successful write, **Try again** retries only the read. Validation/permission errors keep entered text and show safe feedback; session expiration returns to sign-in. Only one editor is active at a time and controls are disabled during a pending write.
+
+Focused mocked browser checks, from `frontend`:
+
+```bash
+npm run test:e2e -- e2e/alternatives.spec.ts e2e/decisions.spec.ts
+```
+
+The real flow is in `e2e/decisions-live.spec.ts`, using the disposable database and `RUN_BROWSER_AUTH_TESTS=1` setup above. It checks persistence, audit actor attribution, and cross-account authorization. No new migrations, dependencies, email calls, or embedding calls are needed for alternative editing.
+
 ## Next integration steps
 
-Connect alternative editing, document upload/processing, semantic search, evidence editing, review/finalization, and detailed audit history. Add server loading/error/empty states as each workflow becomes live.
+Connect document upload/processing, semantic search, evidence editing, review/finalization, and detailed audit history. Add server loading/error/empty states as each workflow becomes live.
 
 Hosting and demo usage controls remain separate work. `npm run preview` only serves the static build; it is not the supported API proxy setup. A production reverse proxy must route `/api/*` to FastAPI with `/api` stripped, preserve the original browser Origin, and serve `index.html` for frontend routes. Keep the session and CSRF cookies on the same origin with HTTPS and secure cookies.

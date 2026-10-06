@@ -31,6 +31,74 @@ test("real decisions persist after reload and remain inaccessible to another acc
     .click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
   const recordUrl = page.url();
+  const decisionId = new URL(recordUrl).pathname.split("/").at(-1)!;
+  for (const option of ["Reduce pressure", "Keep current pressure"]) {
+    await page
+      .getByRole("button", { name: "Add alternative", exact: true })
+      .click();
+    await page.getByLabel("Alternative title").fill(option);
+    await page
+      .getByLabel("Description", { exact: true })
+      .fill("Compare this option against the documented safety margin.");
+    await page.getByRole("button", { name: "Save alternative" }).click();
+    await expect(
+      page.getByRole("heading", { name: option, exact: true }),
+    ).toBeVisible();
+  }
+  await page.reload();
+  const first = page.getByRole("article", {
+    name: "Reduce pressure",
+    exact: true,
+  });
+  await first.getByRole("button", { name: "Edit alternative" }).click();
+  await page
+    .getByLabel("Alternative title")
+    .fill("Reduce the approved pressure");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Reduce the approved pressure" }),
+  ).toBeVisible();
+  await page
+    .getByRole("article", { name: "Keep current pressure", exact: true })
+    .getByRole("button", { name: "Remove alternative" })
+    .click();
+  await page.getByRole("button", { name: "Confirm removal" }).click();
+  await expect(page.getByRole("status")).toHaveText("Alternative removed.");
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Reduce the approved pressure" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Keep current pressure", exact: true }),
+  ).toHaveCount(0);
+  const savedResponse = await page.request.get(
+    `/api/decisions/${decisionId}/record`,
+  );
+  expect(savedResponse.status()).toBe(200);
+  const saved = await savedResponse.json();
+  expect(saved.alternatives).toHaveLength(1);
+  expect(saved.alternatives[0].position).toBe(0);
+  const historyResponse = await page.request.get(
+    `/api/decisions/${decisionId}/history`,
+  );
+  expect(historyResponse.status()).toBe(200);
+  const history = await historyResponse.json();
+  expect(
+    history.items.map((item: { event_type: string }) => item.event_type),
+  ).toEqual([
+    "decision_created",
+    "alternative_added",
+    "alternative_added",
+    "alternative_updated",
+    "alternative_removed",
+  ]);
+  expect(
+    history.items.every(
+      (item: { actor_user_id: string }) =>
+        item.actor_user_id === saved.created_by_user_id,
+    ),
+  ).toBe(true);
+
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
   await expect(page.getByText(question, { exact: true })).toBeVisible();
@@ -66,6 +134,32 @@ test("real decisions persist after reload and remain inaccessible to another acc
       other.getByRole("heading", { name: "Decision unavailable." }),
     ).toBeVisible();
     await expect(other.getByText(question, { exact: true })).toHaveCount(0);
+    const csrf = (await otherContext.cookies()).find(
+      (cookie) => cookie.name === "decision_csrf",
+    )!;
+    const headers = {
+      Origin: "http://127.0.0.1:5173",
+      "X-CSRF-Token": csrf.value,
+    };
+    const alternativesPath = `/api/decisions/${decisionId}/alternatives`;
+    const deniedCreate = await other.request.post(alternativesPath, {
+      headers,
+      data: {
+        title: "Other account option",
+        description: "This account must not change the owner's decision.",
+      },
+    });
+    expect(deniedCreate.status()).toBe(404);
+    const deniedEdit = await other.request.patch(
+      `${alternativesPath}/${saved.alternatives[0].id}`,
+      { headers, data: { title: "Other account edit" } },
+    );
+    expect(deniedEdit.status()).toBe(404);
+    const deniedRemove = await other.request.delete(
+      `${alternativesPath}/${saved.alternatives[0].id}`,
+      { headers },
+    );
+    expect(deniedRemove.status()).toBe(404);
   } finally {
     await otherContext.close();
   }
